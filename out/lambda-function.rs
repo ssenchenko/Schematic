@@ -7,36 +7,43 @@ struct LambdaFunctionCode {
     s3_key: String,
     s3_bucket: String,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionDeadLetterConfig {
     target_arn: String,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionEnvironment {
     variables: String,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionEphemeralStorage {
     size: i32,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionFileSystemConfig {
     local_mount_path: String,
     arn: String,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionTracingConfig {
     mode: LambdaFunctionTracingConfigModeEnum,
 }
+
 enum LambdaFunctionTracingConfigModeEnum {
     Active(String),
     PassThrough(String),
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionVpcConfig {
@@ -44,12 +51,14 @@ struct LambdaFunctionVpcConfig {
     subnet_ids: Vec<String>,,
     security_group_ids: Vec<String>,,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionTag {
     value: String,
     key: String,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionImageConfig {
@@ -57,36 +66,48 @@ struct LambdaFunctionImageConfig {
     command: Vec<String>,,
     entry_point: Vec<String>,,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionSnapStart {
     apply_on: LambdaFunctionSnapStartApplyOnEnum,
 }
-enum LambdaFunctionSnapStartResponseApplyOnEnum {
+
+enum LambdaFunctionSnapStartApplyOnEnum {
     PublishedVersions(String),
     None(String),
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionSnapStartResponse {
     optimization_status: LambdaFunctionSnapStartResponseOptimizationStatusEnum,
     apply_on: LambdaFunctionSnapStartResponseApplyOnEnum,
 }
+
 enum LambdaFunctionSnapStartResponseOptimizationStatusEnum {
     On(String),
     Off(String),
 }
+
+enum LambdaFunctionSnapStartResponseApplyOnEnum {
+    PublishedVersions(String),
+    None(String),
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionRuntimeManagementConfig {
     runtime_version_arn: String,
     update_runtime_on: LambdaFunctionRuntimeManagementConfigUpdateRuntimeOnEnum,
 }
+
 enum LambdaFunctionRuntimeManagementConfigUpdateRuntimeOnEnum {
     Auto(String),
     FunctionUpdate(String),
     Manual(String),
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunctionLoggingConfig {
@@ -95,11 +116,13 @@ struct LambdaFunctionLoggingConfig {
     log_format: LambdaFunctionLoggingConfigLogFormatEnum,
     log_group: String,
 }
+
 enum LambdaFunctionLoggingConfigSystemLogLevelEnum {
     DEBUG(String),
     INFO(String),
     WARN(String),
 }
+
 enum LambdaFunctionLoggingConfigApplicationLogLevelEnum {
     TRACE(String),
     DEBUG(String),
@@ -108,10 +131,12 @@ enum LambdaFunctionLoggingConfigApplicationLogLevelEnum {
     ERROR(String),
     FATAL(String),
 }
+
 enum LambdaFunctionLoggingConfigLogFormatEnum {
     Text(String),
     JSON(String),
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct LambdaFunction {
@@ -144,11 +169,14 @@ struct LambdaFunction {
     runtime_management_config: LambdaFunctionRuntimeManagementConfig,
     logging_config: LambdaFunctionLoggingConfig,
 }
+
 enum LambdaFunctionArchitecturesEnum {
     x86_64(String),
     arm64(String),
 }
+
 enum LambdaFunctionPackageTypeEnum {
     Image(String),
     Zip(String),
 }
+

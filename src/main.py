@@ -11,7 +11,7 @@ def debug(message: str):
         print(message)
 
 
-PATTERN = re.compile(r'(?<!^)(?=[A-Z])')
+PATTERN = re.compile(r"(?<!^)(?=[A-Z])")
 
 
 class LanguageType(TypedDict):
@@ -35,7 +35,7 @@ TYPES: dict[str, LanguageType] = {
     "array": {
         "rust": "Vec<{}>",
         "gql": "[{}]",
-    }
+    },
 }
 
 KEYWORDS: dict[str, LanguageType] = {
@@ -46,7 +46,7 @@ KEYWORDS: dict[str, LanguageType] = {
     "struct": {
         "rust": "struct",
         "gql": ("type", "input"),
-    }
+    },
 }
 
 
@@ -57,11 +57,10 @@ class Name:
     def __init__(self, name: str, prefix: str):
         self._name = name
         self._prefix = prefix
-        self._struct_base_name = name  # self._to_struct_base_name(self._name)
-        self._prefixed_struct_name = f"{self._prefix}{self._struct_base_name}"
+        self._prefixed_struct_name = f"{self._prefix}{self._name}"
 
     def __str__(self) -> str:
-        return self._name
+        return self._prefixed_struct_name
 
     def __repr__(self) -> str:
         return self._name
@@ -69,15 +68,6 @@ class Name:
     @property
     def prefix(self) -> str:
         return self._prefix
-
-    @classmethod
-    def _to_struct_base_name(cls, base_name) -> str:
-        """A hook to shorten or modify struct base name if we need.
-        """
-        new_base = base_name
-        for ending in cls.TYPE_SUFFIXES_TO_REMOVE:
-            new_base = new_base.rstrip(ending)
-        return new_base
 
     @property
     def gql_field(self) -> str:
@@ -109,52 +99,46 @@ class Name:
 
 
 class Translatable(abc.ABC):
-    """Interface for any type and property to translate to Rust and GraphQL
-    """
+    """Interface for any type and property to translate to Rust and GraphQL"""
 
     @abc.abstractmethod
     def to_rust(self) -> str:
-        """Rust type
-        """
+        """Rust type"""
 
     @abc.abstractmethod
     def to_gql(self) -> str:
-        """GraphQL type
-        """
+        """GraphQL type"""
 
 
 class GqlFilterable(abc.ABC):
     @abc.abstractmethod
     def to_gql_filter(self) -> str:
-        """GraphQL input
-        """
+        """GraphQL input"""
 
 
 class TypeName(abc.ABC):
     @property
     @abc.abstractmethod
     def rust(self) -> str:
-        """Rust type
-        """
+        """Rust type"""
 
     @property
     @abc.abstractmethod
     def gql(self) -> str:
-        """GraphQL type
-        """
+        """GraphQL type"""
 
     @property
     @abc.abstractmethod
     def gql_filter(self) -> str:
-        """GraphQL input
-        """
+        """GraphQL input"""
 
 
 class DeclarableType(Translatable, TypeName, abc.ABC):
-    """Parent type for Structs (types, inputs) and Enums
-    """
+    """Parent type for Structs (types, inputs) and Enums"""
 
-    def __init__(self, declarations: dict[str, "DeclarableType"], name: str, prefix: str):
+    def __init__(
+        self, declarations: dict[str, "DeclarableType"], name: str, prefix: str
+    ):
         self._name = Name(name, prefix)
         # register itself
         declarations[str(self._name)] = self
@@ -253,7 +237,13 @@ class Property(Translatable, GqlFilterable):
 
 
 class Enum_(DeclarableType):  # not GqlFilterable
-    def __init__(self, declarations: TypeDeclarations, values: list[str], property_name: str, prefix: str = ""):
+    def __init__(
+        self,
+        declarations: TypeDeclarations,
+        values: list[str],
+        property_name: str,
+        prefix: str = "",
+    ):
         super().__init__(declarations, property_name, prefix)
         self.values = values
 
@@ -270,7 +260,7 @@ class Enum_(DeclarableType):  # not GqlFilterable
         return self._name.gql_enum  # doesn't change in filter
 
     def to_rust(self) -> str:
-        enum_str = line(f"{KEYWORDS["enum"]["rust"]} {self.rust} {{")
+        enum_str = line(f"{KEYWORDS['enum']['rust']} {self.rust} {{")
         for value in self.values:
             # string enums to make it compatible with GraphQL
             # since they are serialized to JSON as strings
@@ -279,7 +269,7 @@ class Enum_(DeclarableType):  # not GqlFilterable
         return enum_str
 
     def to_gql(self) -> str:
-        enum_str = line(f"{KEYWORDS["enum"]["gql"]} {self.gql} {{")
+        enum_str = line(f"{KEYWORDS['enum']['gql']} {self.gql} {{")
         for value in self.values:
             enum_str += tab(line(f"{value}"))
         enum_str += line("}")
@@ -314,7 +304,7 @@ class Struct(DeclarableType, GqlFilterable):
 
     def to_rust(self) -> str:
         struct_str = line("#[derive(Serialize, Deserialize, Debug)]")
-        struct_str += line("#[serde(rename_all = \"PascalCase\")]")
+        struct_str += line('#[serde(rename_all = "PascalCase")]')
         struct_str += line(f"{KEYWORDS['struct']['rust']} {self.rust} {{")
         for prop in self.properties:
             struct_str += tab(line(f"{prop.to_rust()},"))
@@ -322,7 +312,7 @@ class Struct(DeclarableType, GqlFilterable):
         return struct_str
 
     def to_gql(self) -> str:
-        type_keyword = KEYWORDS['struct']['gql'][0]
+        type_keyword = KEYWORDS["struct"]["gql"][0]
         struct_str = line(f"{type_keyword} {self.gql} {{")
         for prop in self.properties:
             struct_str += tab(line(f"{prop.to_gql()}"))
@@ -330,7 +320,7 @@ class Struct(DeclarableType, GqlFilterable):
         return struct_str
 
     def to_gql_filter(self) -> str:
-        input_keyword = KEYWORDS['struct']['gql'][1]
+        input_keyword = KEYWORDS["struct"]["gql"][1]
         struct_str = line(f"{input_keyword} {self.gql_filter} {{")
         for prop in self.properties:
             struct_str += tab(line(f"{prop.to_gql_filter()}"))
@@ -340,39 +330,54 @@ class Struct(DeclarableType, GqlFilterable):
 
 def main():
     data = read_json_file("cfn/lambda-function.json")
+    map_file(data)
+
+
+def map_file(data: dict[str, Any]):
     definitions: dict[str, Any] = data["definitions"]
     properties: dict[str, Any] = data["properties"]
     declarations: TypeDeclarations = {}
     resource_name = "LambdaFunction"
-
     for name, props in definitions.items():
         debug(f"Definition: {name}")
         dfs(declarations, props, name, resource_name)
-
     struct = Struct(declarations, resource_name)  # resource type struct
     for name, props in properties.items():
         dfs(declarations, props, name, resource_name, struct)
-
     with open("out/lambda-function.rs", "w") as rust_file:
         with open("out/lambda-function.gql", "w") as gql_file:
             for _, type_ in declarations.items():
                 debug(f"About to print {type_}")
                 rust_file.write(type_.to_rust())
+                rust_file.write("\n")
                 gql_file.write(type_.to_gql())
                 if isinstance(type_, GqlFilterable):
                     gql_file.write(type_.to_gql_filter())
+                gql_file.write("\n")
 
 
-def dfs(declarations: TypeDeclarations, data: dict[str, Any], name: str, prefix, struct: Optional[Struct] = None):
-    stack: list[tuple[dict[str, Any], str, str, Optional[Struct]]] = [(data, name, prefix, struct)]
+def dfs(
+    declarations: TypeDeclarations,
+    data: dict[str, Any],
+    name: str,
+    prefix,
+    struct: Optional[Struct] = None,
+):
+    stack: list[tuple[dict[str, Any], str, str, Optional[Struct]]] = [
+        (data, name, prefix, struct)
+    ]
 
     while stack:
         data, name, prefix, struct = stack.pop()
         if "$ref" in data:
-            property_type, type_name = follow_reference(declarations, data)
+            property_type, type_name = follow_reference(declarations, data, prefix)
             if not property_type:
-                print(f"[ERROR]: Type: {type_name} in {name} should have been mapped but it's not")
-            struct.append(Property(property_type, name))  # $ref is only in the properties
+                print(
+                    f"[ERROR]: Type: {type_name} in {name} should have been mapped but it's not"
+                )
+            struct.append(
+                Property(property_type, name)
+            )  # $ref is only in the properties
 
         elif data["type"] == "object":
             if "properties" in data:
@@ -390,9 +395,13 @@ def dfs(declarations: TypeDeclarations, data: dict[str, Any], name: str, prefix,
             if "enum" in data["items"]:
                 property_type = Enum_(declarations, data["items"]["enum"], name, prefix)
             elif "$ref" in data["items"]:
-                property_type, type_name = follow_reference(declarations, data["items"])
+                property_type, type_name = follow_reference(
+                    declarations, data["items"], prefix
+                )
                 if not property_type:
-                    print(f"[ERROR]: Type: {type_name} in {name} should have been mapped but it's not")
+                    print(
+                        f"[ERROR]: Type: {type_name} in {name} should have been mapped but it's not"
+                    )
             else:
                 property_type = map_scalar_type(data["items"]["type"])
             struct.append(Property(Array(property_type), name))
@@ -411,13 +420,15 @@ def dfs(declarations: TypeDeclarations, data: dict[str, Any], name: str, prefix,
             struct.append(Property(Boolean(), name))
 
         else:
-            print(f"[ERROR]: Unknown type: {data["type"]} in {name}")
+            print(f"[ERROR]: Unknown type: {data['type']} in {name}")
 
 
-def follow_reference(declarations: TypeDeclarations, property_info: dict[str, Any]) -> tuple[DeclarableType, str]:
+def follow_reference(
+    declarations: TypeDeclarations, property_info: dict[str, Any], prefix: str
+) -> tuple[DeclarableType, str]:
     reference: str = property_info["$ref"]
     type_name = reference.split("/")[-1]
-    type_ = declarations[type_name]
+    type_ = declarations[f"{prefix}{type_name}"]
     return type_, type_name
 
 
