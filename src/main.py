@@ -1,15 +1,11 @@
 import abc
 import json
+import logging
+import os
 import re
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, TypeAlias, TypedDict
-
-DEBUG = True
-
-
-def debug(message: str):
-    if DEBUG:
-        print(message)
-
 
 PATTERN = re.compile(r"(?<!^)(?=[A-Z])")
 
@@ -32,6 +28,7 @@ TYPES: dict[str, LanguageType] = {
         "rust": "i32",
         "gql": "Int",
     },
+    "number": {"rust": "f64", "gql": "Float"},
     "array": {
         "rust": "Vec<{}>",
         "gql": "[{}]",
@@ -48,6 +45,32 @@ KEYWORDS: dict[str, LanguageType] = {
         "gql": ("type", "input"),
     },
 }
+
+
+class ResourceFileName:
+    DIR = "out"
+    RUST_DIR = "model"
+    GQL_DIR = "graphql"
+    RUST_EXTENSION = "rs"
+    GQL_EXTENSION = "gql"
+
+    def __init__(self, file_name: str):
+        self.file_name = file_name
+        self.name_base = file_name.split(".")[0]
+
+    @property
+    def resource_type_name(self):
+        parts = self.name_base.split("-")[1:]
+        parts = [x.capitalize() for x in parts]
+        return "".join(parts)
+
+    @property
+    def rust_file(self):
+        return f"{self.DIR}/{self.RUST_DIR}/{self.name_base}.{self.RUST_EXTENSION}"
+
+    @property
+    def gql_file(self):
+        return f"{self.DIR}/{self.GQL_DIR}/{self.name_base}.{self.GQL_EXTENSION}"
 
 
 class Name:
@@ -179,6 +202,23 @@ class Integer(TypeName):
 
     def __repr__(self):
         return "integer"
+
+
+class Float(TypeName):
+    @property
+    def rust(self) -> str:
+        return TYPES["number"]["rust"]
+
+    @property
+    def gql(self) -> str:
+        return TYPES["number"]["gql"]
+
+    @property
+    def gql_filter(self) -> str:
+        return TYPES["number"]["gql"]
+
+    def __repr__(self):
+        return "number"
 
 
 class String(TypeName):
@@ -329,25 +369,67 @@ class Struct(DeclarableType, GqlFilterable):
 
 
 def main():
-    data = read_json_file("cfn/lambda-function.json")
-    map_file(data)
+    now = datetime.now()
+    now_str = now.isoformat()
+    logging.basicConfig(
+        filename=f"logs/{now_str}.log", encoding="utf-8", level=logging.INFO
+    )
+    all_schema = "cfn/"
+    failures_tracking = "logs/failures.log"
+
+    if Path(failures_tracking).exists():
+        files = []
+        with open(failures_tracking, "r") as failures:
+            files = failures.readlines()
+        files = [Path(x.rstrip("\n")) for x in files]
+    else:
+        files = Path(all_schema).glob("*")
+
+    with open(failures_tracking, "w") as failures:
+        errors = 0
+        for file in files:
+            logging.info(str(file))
+            try:
+                data = read_json_file(file)
+                map_file(data, file.name)
+            except Exception as e:
+                errors += 1
+                logging.error(f"File {file} failed. {repr(e)}")
+                failures.write(f"{file}\n")
+
+    if not errors and Path(failures_tracking).exists():
+        os.remove(failures_tracking)
 
 
-def map_file(data: dict[str, Any]):
-    definitions: dict[str, Any] = data["definitions"]
+def map_file(data: dict[str, Any], file_name: str):
+    resource_file_name = ResourceFileName(file_name)
+    definitions: dict[str, Any] = data.get("definitions", {})
     properties: dict[str, Any] = data["properties"]
     declarations: TypeDeclarations = {}
-    resource_name = "LambdaFunction"
+    resource_name = resource_file_name.resource_type_name
+
+    visited: set[str] = set()
     for name, props in definitions.items():
-        debug(f"Definition: {name}")
-        dfs(declarations, props, name, resource_name)
+        logging.debug(f"Definition: {name}")
+        if name in visited:
+            continue
+        dfs(
+            declarations,
+            props,
+            name,
+            resource_name,
+            definitions=definitions,
+            visited=visited,
+        )
+
     struct = Struct(declarations, resource_name)  # resource type struct
     for name, props in properties.items():
         dfs(declarations, props, name, resource_name, struct)
-    with open("out/lambda-function.rs", "w") as rust_file:
-        with open("out/lambda-function.gql", "w") as gql_file:
+
+    with open(resource_file_name.rust_file, "w") as rust_file:
+        with open(resource_file_name.gql_file, "w") as gql_file:
             for _, type_ in declarations.items():
-                debug(f"About to print {type_}")
+                logging.debug(f"Printing {type_} to file")
                 rust_file.write(type_.to_rust())
                 rust_file.write("\n")
                 gql_file.write(type_.to_gql())
@@ -362,6 +444,8 @@ def dfs(
     name: str,
     prefix,
     struct: Optional[Struct] = None,
+    definitions: Optional[dict[str, Any]] = None,
+    visited: Optional[set[str]] = None,
 ):
     stack: list[tuple[dict[str, Any], str, str, Optional[Struct]]] = [
         (data, name, prefix, struct)
@@ -369,15 +453,30 @@ def dfs(
 
     while stack:
         data, name, prefix, struct = stack.pop()
+        if visited is not None:
+            visited.add(name)
+
         if "$ref" in data:
-            property_type, type_name = follow_reference(declarations, data, prefix)
-            if not property_type:
-                print(
-                    f"[ERROR]: Type: {type_name} in {name} should have been mapped but it's not"
-                )
-            struct.append(
-                Property(property_type, name)
-            )  # $ref is only in the properties
+            reference: str = data["$ref"]
+            type_name = reference.split("/")[-1]
+            property_type = declarations.get(f"{prefix}{type_name}")
+            if property_type is None:
+                # we are still processing definitions and the reference to another definitions
+                if type_name not in definitions:
+                    raise Exception(
+                        f"Type: {type_name} in {name} not found in definitions"
+                    )
+                if definitions[type_name]["type"] == "object":
+                    # stop processing current node till type is ready, send them back to stack
+                    stack.append((data, name, prefix, struct))
+                    # visit referred type first and start new struct
+                    stack.append((definitions[type_name], type_name, prefix, None))
+                else:  # keep working with the same struct
+                    stack.append((definitions[type_name], type_name, prefix, struct))
+            else:
+                struct.append(
+                    Property(property_type, name)
+                )  # $ref is only in the properties
 
         elif data["type"] == "object":
             if "properties" in data:
@@ -385,7 +484,8 @@ def dfs(
                     struct = Struct(declarations, name, prefix)
                 prefix = f"{prefix}{name}"
                 for prop_name, prop_data in data["properties"].items():
-                    stack.append((prop_data, prop_name, prefix, struct))
+                    if prop_name not in visited:
+                        stack.append((prop_data, prop_name, prefix, struct))
             else:
                 # map to string bc in GraphQL arbitrary named keys are not possible,
                 # so it will be serialized json
@@ -395,13 +495,8 @@ def dfs(
             if "enum" in data["items"]:
                 property_type = Enum_(declarations, data["items"]["enum"], name, prefix)
             elif "$ref" in data["items"]:
-                property_type, type_name = follow_reference(
-                    declarations, data["items"], prefix
-                )
-                if not property_type:
-                    print(
-                        f"[ERROR]: Type: {type_name} in {name} should have been mapped but it's not"
-                    )
+                stack.append((data["items"], name, prefix, struct))
+                continue
             else:
                 property_type = map_scalar_type(data["items"]["type"])
             struct.append(Property(Array(property_type), name))
@@ -413,23 +508,23 @@ def dfs(
                 property_type = String()
             struct.append(Property(property_type, name))
 
+        elif data["type"] == [
+            "object",
+            "string",
+        ]:  # maybe a typo, from aws-iam-managedpolicy.json
+            struct.append(Property(String(), name))  # it'll be serialized json
+
         elif data["type"] == "integer":
             struct.append(Property(Integer(), name))
+
+        elif data["type"] == "number":
+            struct.append(Property(Float(), name))
 
         elif data["type"] == "boolean":
             struct.append(Property(Boolean(), name))
 
         else:
-            print(f"[ERROR]: Unknown type: {data['type']} in {name}")
-
-
-def follow_reference(
-    declarations: TypeDeclarations, property_info: dict[str, Any], prefix: str
-) -> tuple[DeclarableType, str]:
-    reference: str = property_info["$ref"]
-    type_name = reference.split("/")[-1]
-    type_ = declarations[f"{prefix}{type_name}"]
-    return type_, type_name
+            raise Exception(f" Unknown type: {data['type']} in {name}")
 
 
 def map_scalar_type(type_name: str) -> Optional[TypeName]:
@@ -439,7 +534,9 @@ def map_scalar_type(type_name: str) -> Optional[TypeName]:
         return Integer()
     if type_name == "boolean":
         return Boolean()
-    print(f"[ERROR]: Unknown type: {type_name}")
+    if type_name == "number":
+        return Float()
+    raise Exception(f"[ERROR]: Unknown type: {type_name}")
 
 
 def tab(string: str, number: int = 1, size: int = 4) -> str:
@@ -457,7 +554,7 @@ def pascal_to_snake(pascal_string: str) -> str:
     return snake_string
 
 
-def read_json_file(file_name: str) -> dict[str, Any]:
+def read_json_file(file_name: Path) -> dict[str, Any]:
     with open(file_name, "r") as file:
         data: dict[str, Any] = json.load(file)
     return data

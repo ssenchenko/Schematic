@@ -1,2 +1,12 @@
-/target
+logs/*.log
+out/model/*.rs
+out/graphql/*.gql
+
+# python
 .venv/
+
+# Mac
+.DS_Store
+
+# intellij
+.idea/
