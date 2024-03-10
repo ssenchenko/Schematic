@@ -1,4 +1,5 @@
 logs/*.log
+cfn/*.json
 out/model/*.rs
 out/graphql/*.gql
 
