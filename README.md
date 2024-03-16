@@ -30,12 +30,13 @@ or with a local Python virtual environment. Here is how to do it with the last o
 ## Schema
 Schema files are not checked in to the repo
 
-- Download schema from [AWS docs](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-type-schemas.html)
-- Unzip and move schema files to the `cfn/` directory
+- `make download`to download schema from [AWS docs, us-east-1 region](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-type-schemas.html) and unzip in `cfn/` directory
+- `make clean-downloads` to remove downloaded JSON schema files (if necessary)
 
 # Use
 
 ## Run
+- 
 - `make run`
   - first it runs on all files in `cfn/` directory
   - on the next run, if there were failed files from the last time, script will run only on them

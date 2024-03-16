@@ -1,11 +1,12 @@
 import abc
 import json
 import logging
-import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, TypeAlias, TypedDict
+
+from transform import to_types_map, TypesMap, find_serialized_objects
 
 PATTERN = re.compile(r"(?<!^)(?=[A-Z])")
 
@@ -51,6 +52,8 @@ class ResourceFileName:
     DIR = "out"
     RUST_DIR = "model"
     GQL_DIR = "graphql"
+    MAP_DIR = "map"
+    MAP_EXTENSION = "json"
     RUST_EXTENSION = "rs"
     GQL_EXTENSION = "gql"
 
@@ -71,6 +74,10 @@ class ResourceFileName:
     @property
     def gql_file(self):
         return f"{self.DIR}/{self.GQL_DIR}/{self.name_base}.{self.GQL_EXTENSION}"
+
+    @property
+    def map_file(self):
+        return f"{self.DIR}/{self.MAP_DIR}/{self.name_base}.{self.MAP_EXTENSION}"
 
 
 class Name:
@@ -375,30 +382,47 @@ def main():
         filename=f"logs/{now_str}.log", encoding="utf-8", level=logging.INFO
     )
     all_schema = "cfn/"
-    failures_tracking = "logs/failures.log"
+    files = Path(all_schema).glob("*.json")
 
-    if Path(failures_tracking).exists():
-        files = []
-        with open(failures_tracking, "r") as failures:
-            files = failures.readlines()
-        files = [Path(x.rstrip("\n")) for x in files]
-    else:
-        files = Path(all_schema).glob("*")
+    for file in files:
+        try:
+            data = read_json_file(file)
+            resource_file_name = ResourceFileName(file.name)
+            resource_name = resource_type_to_name(data["typeName"])
+            types_map = create_types_map(data, resource_name)
 
-    with open(failures_tracking, "w") as failures:
-        errors = 0
-        for file in files:
-            logging.info(str(file))
-            try:
-                data = read_json_file(file)
-                map_file(data, file.name)
-            except Exception as e:
-                errors += 1
-                logging.error(f"File {file} failed. {repr(e)}")
-                failures.write(f"{file}\n")
+            with open(resource_file_name.map_file, "w") as map_file:
+                json.dump(types_map, map_file, indent=4)
 
-    if not errors and Path(failures_tracking).exists():
-        os.remove(failures_tracking)
+            # map_file(data, file.name)
+        except Exception as e:
+            logging.error(f"File {file} failed. {repr(e)}")
+
+    logging.info("=======[Maps have been created]=======")
+
+    all_maps = "out/map/"
+    maps = Path(all_maps).glob("*.json")
+    serialized_objects: dict[str, list[str]] = {}
+    for file in maps:
+        try:
+            types_map = read_json_file(file)
+            resource_name = types_map["typeName"]
+            del types_map["typeName"]
+
+            so_entry = find_serialized_objects(types_map, resource_name)
+            if so_entry:
+                serialized_objects[resource_name] = so_entry
+        except Exception as e:
+            logging.error(f"File {file} failed. {repr(e)}")
+    with open(Path("out/serialized-objects.json"), "w") as so:
+        json.dump(serialized_objects, so, indent=4)
+
+
+def create_types_map(data: dict[str, Any], resource_name: str):
+    definitions: dict[str, Any] = data.get("definitions", {})
+    properties: dict[str, Any] = data["properties"]
+    types_map = to_types_map(resource_name, definitions, properties)
+    return types_map
 
 
 def map_file(data: dict[str, Any], file_name: str):
@@ -552,6 +576,11 @@ def line(string: str) -> str:
 def pascal_to_snake(pascal_string: str) -> str:
     snake_string = PATTERN.sub("_", pascal_string).lower()
     return snake_string
+
+
+def resource_type_to_name(type_: str) -> str:
+    _, service, resource = type_.split("::")
+    return f"{service}{resource}"
 
 
 def read_json_file(file_name: Path) -> dict[str, Any]:
