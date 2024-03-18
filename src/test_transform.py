@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.main import ResourceFileName
-from src.transform import to_types_map, find_serialized_objects
+from main import ResourceFileName
+from transform import to_types_map, find_serialized_objects
 
 
 @pytest.fixture()
@@ -12,7 +12,7 @@ def load_resource():
     def _load_resource(file_path):
         path = Path(file_path)
         resource_file_name = ResourceFileName(path.name)
-        with open(path, "r") as file:
+        with open(path, "r", encoding="utf-8") as file:
             return json.load(file), resource_file_name.resource_type_name
 
     return _load_resource
@@ -23,8 +23,8 @@ def test_to_types_map_not_break(load_resource):
         "cfn/aws-connect-userhierarchygroup.json",
         "cfn/aws-apigateway-model.json",
     ]
-    for input in inputs:
-        resource, resource_name = load_resource(file_path=input)
+    for input_ in inputs:
+        resource, resource_name = load_resource(file_path=input_)
         definitions = resource.get("definitions", {})
         properties = resource["properties"]
         types_map = to_types_map(resource_name, definitions, properties)
@@ -53,7 +53,7 @@ def test_find_serialized_objects():
     inputs = [
         (
             {
-                "typeName": "CEAnomalySubscription",
+                "resourceTypeName": "CEAnomalySubscription",
                 "Arn": "string",
                 "Subscriber": {
                     "Address": "string",
@@ -80,7 +80,7 @@ def test_find_serialized_objects():
         ),
         (
             {
-                "typeName": "GluePartition",
+                "resourceTypeName": "GluePartition",
                 "SchemaReference": {
                     "SchemaId": "SchemaId",
                     "SchemaVersionId": "string",
@@ -140,7 +140,7 @@ def test_find_serialized_objects():
         ),
     ]
 
-    for input, output in inputs:
-        so = find_serialized_objects(input, input["typeName"])
+    for input_, output in inputs:
+        so = find_serialized_objects(input_, input_["resourceTypeName"])
 
         assert so.sort() == output.sort()

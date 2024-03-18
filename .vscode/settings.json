@@ -5,5 +5,18 @@
     "[go]": {
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "golang.go"
-    }
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "pylint.args": [
+        "--disable=C0111", // Missing module docstring
+        "--disable=W0718", // broad-except
+        // "--logging-format-style=fstr"
+    ],
+    "python.testing.pytestArgs": [
+        "src"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
 }

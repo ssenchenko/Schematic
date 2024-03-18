@@ -6,6 +6,8 @@ out/map/*.json
 
 # python
 .venv/
+.pytest_cache/
+__pycache__/
 
 # Mac
 .DS_Store

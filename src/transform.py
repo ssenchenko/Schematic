@@ -234,7 +234,7 @@ def _init_types_map(resource_name: str, definitions: Definitions) -> TypesMap:
     :param definitions: The definitions of the resource.
     :return: The initialized types map.
     """
-    types_map: TypesMap = {"typeName": resource_name}
+    types_map: TypesMap = {"resourceTypeName": resource_name}
     array_defs: dict[str, Any] = {}
 
     for type_name, type_info in definitions.items():
