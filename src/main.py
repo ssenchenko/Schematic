@@ -4,118 +4,69 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from transform import to_types_map, find_serialized_objects
-from translate import translate_gql_common, translate_resource
+from translate import translate_all
 
 
-class ResourceFileName:
-    DIR = "out"
-    RUST_DIR = "model"
-    GQL_DIR = "graphql"
-    MAP_DIR = "map"
-    MAP_EXTENSION = "json"
-    RUST_EXTENSION = "rs"
-    GQL_EXTENSION = "gql"
+LOG = logging.getLogger(__name__)
 
-    def __init__(self, file_name: str):
-        self.file_name = file_name
-        self.name_base = file_name.split(".")[0]
+IA_SCOPE_ONLY = True  # set to True if necessary to test only for IA resources
 
-    @property
-    def resource_type_name(self):
-        parts = self.name_base.split("-")[1:]
-        parts = [x.capitalize() for x in parts]
-        return "".join(parts)
+IA_RESOURCES = frozenset(
+    {
+        "AWS::EC2::Instance",
+        "AWS::EC2::VolumeAttachment",
+        "AWS::EC2::Volume",
+        "AWS::EC2::VPC",
+        "AWS::EC2::SecurityGroup",
+        "AWS::IAM::InstanceProfile",
+        "AWS::IAM::Role",
+        "AWS::IAM::Policy",
+        "AWS::CloudWatch::Alarm",
+        "AWS::S3::Bucket",
+    }
+)
 
-    @property
-    def rust_file(self):
-        return f"{self.DIR}/{self.RUST_DIR}/{self.name_base}.{self.RUST_EXTENSION}"
-
-    @property
-    def gql_file(self):
-        return f"{self.DIR}/{self.GQL_DIR}/{self.name_base}.{self.GQL_EXTENSION}"
-
-    @property
-    def map_file(self):
-        return f"{self.DIR}/{self.MAP_DIR}/{self.name_base}.{self.MAP_EXTENSION}"
+# some property names seems to be wrong in relationship schema file
+ALL_SCHEMA_COMBINED_OVERRIDES = {"AWS::EC2::Instance": {"VolumeAttachments": "Volumes"}}
 
 
 def main():
-    now = datetime.now()
-    now_str = now.isoformat()
-    logging.basicConfig(
-        filename=f"logs/{now_str}.log", encoding="utf-8", level=logging.INFO
-    )
-    all_schema = "cfn/"
-    files = Path(all_schema).glob("*.json")
-
-    for file in files:
+    cfn_schema_files = Path("cfn/").glob("*.json")
+    cfn_schema = {}
+    filter = IA_RESOURCES if IA_SCOPE_ONLY else frozenset()
+    for file in cfn_schema_files:
         try:
             data = read_json_file(file)
-            resource_file_name = ResourceFileName(file.name)
-            resource_name = resource_type_to_name(data["typeName"])
-            types_map = create_types_map(data, resource_name)
-            # keep original CFN name
-            types_map["typeName"] = data["typeName"]
-
-            write_json_file(Path(resource_file_name.map_file), types_map)
-
-            # map_file(data, file.name)
+            resource_name = data["typeName"]
+            if filter and resource_name not in filter:
+                continue
+            cfn_schema[resource_name] = data
         except Exception as e:
-            logging.error("File %s failed. %s", file, repr(e))
-
-    logging.info("=======[Maps have been created]=======")
-
-    maps = Path("out/map/").glob("*.json")
-    serialized_objects: dict[str, list[str]] = {}
-    for file in maps:
-        try:
-            types_map = read_json_file(file)
-            resource_name = types_map["resourceTypeName"]
-
-            so_entry = find_serialized_objects(types_map, resource_name)
-            if so_entry:
-                serialized_objects[types_map["typeName"]] = so_entry
-
-        except Exception as e:
-            logging.error("File %s failed. %s", file, repr(e))
-    write_json_file(Path("out/serialized-objects.json"), serialized_objects)
-
-    logging.info("=======[Untyped objects file created]=======")
-
-    maps = Path("out/map/").glob("*.json")
-    resource_struct_names = []
-    for file in maps:
-        try:
-            types_map = read_json_file(file)
-            rust, gql, resource_struct_name = translate_resource(types_map)
-            resource_struct_names.append(resource_struct_name)
-            resource_file_name = ResourceFileName(file.name)
-            with open(Path(resource_file_name.rust_file), "w", encoding="utf-8") as rf:
-                rf.write(rust)
-            with open(Path(resource_file_name.gql_file), "w", encoding="utf-8") as gf:
-                gf.write(gql)
-        except Exception as e:
-            logging.error("File %s failed. %s", file, repr(e))
+            LOG.error("File %s failed. %s", file.name, repr(e))
 
     try:
-        common_gql = translate_gql_common(resource_struct_names)
-        with open("out/graphql/common.gql", "w", encoding="utf-8") as gf:
-            gf.write(common_gql)
+        all_schema_combined_file = Path("relationship/all-schema-combined.json")
+        all_schema_combined = read_json_file(all_schema_combined_file)
+        all_schema_combined = apply_all_schema_combined_overrides(
+            all_schema_combined, ALL_SCHEMA_COMBINED_OVERRIDES
+        )
+        output = translate_all(all_schema_combined, cfn_schema, filter=filter)
+        with open(Path("out/model.rs"), "w", encoding="utf-8") as gf:
+            gf.write(output)
     except Exception as e:
-        logging.error("File common.gql failed. %s", repr(e))
+        LOG.error("Translation failed. %s", repr(e))
 
 
-def create_types_map(data: dict[str, Any], resource_name: str):
-    definitions: dict[str, Any] = data.get("definitions", {})
-    properties: dict[str, Any] = data["properties"]
-    types_map = to_types_map(resource_name, definitions, properties)
-    return types_map
+def apply_all_schema_combined_overrides(
+    all_schema_combined: dict[str, Any], overrides: dict[str, dict[str, str]]
+):
+    for override_resource in overrides:
+        for item in all_schema_combined[override_resource]["relationships"]:
+            for old_name, new_name in overrides[override_resource].items():
+                if old_name in item:
+                    item[new_name] = item.pop(old_name)
 
-
-def resource_type_to_name(type_: str) -> str:
-    _, service, resource = type_.split("::")
-    return f"{service}{resource}"
+    return all_schema_combined
 
 
 def read_json_file(file_name: Path) -> dict[str, Any]:
@@ -124,10 +75,10 @@ def read_json_file(file_name: Path) -> dict[str, Any]:
     return data
 
 
-def write_json_file(file_name: Path, data: dict[str, Any]):
-    with open(file_name, "w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4)
-
-
 if __name__ == "__main__":
+    now = datetime.now()
+    now_str = now.isoformat()
+    logging.basicConfig(
+        filename=f"logs/{now_str}.log", encoding="utf-8", level=logging.INFO
+    )
     main()

@@ -1,0 +1,19 @@
+[package]
+name = "graphql-schema"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "graphql_schema"
+path = "src/lib.rs"
+
+[[bin]]
+name = "generate-sdl"
+path = "src/tools/sdl.rs"
+
+[dependencies]
+async-graphql = "7.0.3"
+serde = { version = "1.0.197", features = ["derive"] }

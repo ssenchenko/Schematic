@@ -1,8 +1,6 @@
+# project
 logs/*.log
 cfn/*.json
-out/model/*.rs
-out/graphql/*.gql
-out/map/*.json
 
 # python
 .venv/

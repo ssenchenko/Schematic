@@ -1,11 +1,13 @@
 import abc
-import re
+import logging
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterator, TypedDict
+from typing import Iterator, TypedDict, Any
 
-from transform import TypesMap
+from traverse import is_array
+from util import resource_type_to_name, pascal_to_snake
 
-TYPE_NAME_PATTERN = re.compile(r"(?<!^)(?=[A-Z])")
+LOG = logging.getLogger(__name__)
 
 
 class LanguageType(TypedDict):
@@ -46,11 +48,6 @@ TYPES: dict[Types, LanguageType] = {
 }
 
 
-def pascal_to_snake(pascal_string: str) -> str:
-    snake_string = TYPE_NAME_PATTERN.sub("_", pascal_string).lower()
-    return snake_string
-
-
 class Translatable(abc.ABC):
     """Interface for any type and property to translate to Rust and GraphQL"""
 
@@ -60,88 +57,60 @@ class Translatable(abc.ABC):
         """Rust type"""
 
     @property
-    @abc.abstractmethod
     def gql(self) -> str:
         """GraphQL type"""
-
-
-class GqlFilterable(abc.ABC):
-    @property
-    @abc.abstractmethod
-    def gql_filter(self) -> str:
-        """GraphQL input"""
-
-
-class TranslatableAndFilterable(Translatable, GqlFilterable, abc.ABC):
-    """Uniting the two interfaces."""
+        return ""
 
 
 class PropertyName(Translatable):
-    def __init__(self, name: str):
-        self._name = name
+
+    def __init__(self, name: str, keep_case: bool = False):
+        self.original_name = name
+        self.keep_case = keep_case
 
     @property
     def rust(self) -> str:
-        return pascal_to_snake(self._name)
-
-    @property
-    def gql(self) -> str:
-        return self._name
+        if self.keep_case:
+            return self.original_name
+        return pascal_to_snake(self.original_name)
 
     def __repr__(self):
-        return self._name
+        return self.original_name
 
 
-class EnumName(Translatable):
-    def __init__(self, name: str, prefix: str):
-        self._name = name
-        self._prefix = prefix
-        self._prefixed_name: str = f"{self._prefix}{self._name}"
-        # don't add Enum suffix if it's already there
-
-    @property
-    def rust(self) -> str:
-        return self._prefixed_name
-
-    @property
-    def gql(self) -> str:
-        return self._prefixed_name
-
-    def __repr__(self):
-        return self._prefixed_name
-
-
-class StructName(Translatable, GqlFilterable):
+class StructName(Translatable):
     # an option if we want to use it
     TYPE_SUFFIXES_TO_REMOVE = ("Config", "Configuration", "Options")
 
-    def __init__(self, name: str, prefix: str):
-        self._name = name
+    def __init__(self, name: str, prefix: str = ""):
+        self.original_name = name
         # no prefix for resource
-        self._prefix = "" if prefix == name else prefix
-        self._prefixed_struct_name = f"{self._prefix}{self._name}"
+        self._prefix = resource_type_to_name(
+            prefix, preserve_case=False, keep_partition=True
+        )
+
+    def _prefixed_struct_name(self, name: str):
+        return f"{self._prefix}{name}"
 
     @property
     def rust(self) -> str:
-        return self._prefixed_struct_name
+        name = resource_type_to_name(
+            self.original_name, preserve_case=False, keep_partition=True
+        )
+        return self._prefixed_struct_name(name)
 
     @property
     def gql(self) -> str:
-        return self._prefixed_struct_name
-
-    @property
-    def gql_filter(self) -> str:
-        return f"{self._prefixed_struct_name}Filter"
-
-    @property
-    def prefix(self) -> str:
-        return self._prefix
+        name = resource_type_to_name(
+            self.original_name, separator="_", preserve_case=False, keep_partition=True
+        )
+        return self._prefixed_struct_name(name)
 
     def __repr__(self) -> str:
-        return self._prefixed_struct_name
+        return self._prefixed_struct_name(self.original_name)
 
 
-class ScalarType(Translatable, GqlFilterable):
+class ScalarType(Translatable):
 
     def __init__(self, name: Types):
         self._name = name
@@ -150,57 +119,20 @@ class ScalarType(Translatable, GqlFilterable):
     def rust(self) -> str:
         return TYPES[self._name]["rust"]
 
-    @property
-    def gql(self) -> str:
-        return TYPES[self._name]["gql"]
-
-    @property
-    def gql_filter(self) -> str:
-        return TYPES[self._name]["gql"]
-
     def __repr__(self):
         return self._name
 
 
-def is_scalar(type_name: str) -> bool:
-    return type_name in [
-        Types.STRING.value,
-        Types.BOOLEAN.value,
-        Types.INTEGER.value,
-        Types.NUMBER.value,
-        Types.SERIALIZABLE_OBJECT.value,
-        Types.NULL.value,
-    ]
-
-
-class Array(Translatable, GqlFilterable):
-
-    def __init__(self, item_type: TranslatableAndFilterable):
-        self._name = Types.ARRAY
-        self._item_type = item_type
-
-    @property
-    def rust(self) -> str:
-        return f"{TYPES[self._name]['rust'].format(self._item_type.rust)},"
-
-    @property
-    def gql(self) -> str:
-        return f"{TYPES[self._name]['gql'].format(self._item_type.gql)}"
-
-    @property
-    def gql_filter(self) -> str:
-        return f"{TYPES[self._name]['gql'].format(self._item_type.gql_filter)}"
-
-    def __repr__(self):
-        return f"array<{repr(self._item_type)}>"
-
-
-class Property(Translatable, GqlFilterable):
+class Property(Translatable):
 
     def __init__(
-        self, type_: TranslatableAndFilterable | Translatable, name: PropertyName
+        self,
+        type_: Translatable,
+        name: PropertyName,
+        required: bool = False,
     ):
         self.name = name
+        self.required = required
         self.property_type = type_
 
     def __repr__(self):
@@ -208,125 +140,168 @@ class Property(Translatable, GqlFilterable):
 
     @property
     def rust(self) -> str:
-        return f"pub {self.name.rust}: Option<{self.property_type.rust}>,"
-
-    @property
-    def gql(self) -> str:
-        return f"{self.name.gql}: {self.property_type.gql}"
-
-    @property
-    def gql_filter(self) -> str:
-        type_ = (
-            self.property_type.gql_filter
-            if isinstance(self.property_type, GqlFilterable)
-            else self.property_type.gql
-        )
-        return f"{self.name.gql}: {type_}"
+        if self.required:
+            return f"pub {self.name.rust}: {self.property_type.rust},"
+        return f"{self.name.rust}: Option<{self.property_type.rust}>,"
 
 
-def property_type(
-    prop_type_name: str, prefix: str
-) -> TranslatableAndFilterable | Translatable:
-    if is_scalar(prop_type_name):
-        return ScalarType(Types(prop_type_name))
-    elif prop_type_name.startswith(Types.ARRAY.value):
-        return unwrap_arrays(prop_type_name, prefix)
-    elif prop_type_name.endswith("Enum"):
-        return EnumName(prop_type_name, prefix)
-    else:
-        return StructName(prop_type_name, prefix)
-
-
-def unwrap_arrays(prop_type_name: str, prefix: str) -> Array:
-    parts = prop_type_name.split("/")
-    if len(parts) < 2 or parts[0] != Types.ARRAY.value:
-        raise ValueError(f"Invalid array type name: {prop_type_name}")
-    if len(parts) == 2:
-        if is_scalar(parts[1]):
-            return Array(ScalarType(Types(parts[1])))
-        else:
-            return Array(StructName(parts[1], prefix))
-    nested_array = unwrap_arrays("/".join(parts[1:]), prefix)
-    return Array(nested_array)
-
-
-class Enum_(Translatable):  # pylint: disable=invalid-name
-    def __init__(
-        self,
-        enum_name: EnumName,
-        values: list[str],
-    ):
-        self.name = enum_name
-        self.values = values
-
-    @property
-    def rust(self) -> str:
-        enum_str = line(f"enum {self.name.rust} {{")
-        for value in self.values:
-            enum_str += line(tab(f"{value},"))
-        enum_str += line("}")
-        return enum_str
-
-    @property
-    def gql(self) -> str:
-        enum_str = line(f"enum {self.name.gql} {{")
-        for value in self.values:
-            enum_str += line(tab(f"{value}"))
-        enum_str += line("}")
-        return enum_str
-
-    def __repr__(self):
-        return str({self.name: self.values})
-
-
-class Struct(Translatable, GqlFilterable):
+class Struct(Translatable):
     def __init__(
         self,
         struct_name: StructName,
         is_resource: bool = False,
+        in_relationships: bool = False,
     ):
         self.name = struct_name
         self.properties: list[Property] = []
         self.is_resource = is_resource
+        self.has_relationships = in_relationships
+
+        if self.is_resource:
+            self.properties.append(
+                Property(ScalarType(Types.STRING), PropertyName("Id"), required=True)
+            )
+            if self.has_relationships:
+                self.properties.append(
+                    Property(
+                        ScalarType(Types.STRING),
+                        PropertyName("AllProperties"),
+                        required=True,
+                    )
+                )
 
     def append(self, prop: Property):
         self.properties.append(prop)
 
     @property
     def rust(self) -> str:
-        struct_str = line("#[derive(Serialize, Deserialize, Debug)]")
-        struct_str += line('#[serde(rename_all = "PascalCase")]')
-        struct_str += line(f"pub struct {self.name.rust} {{")
+        use_complex = ", complex" if self.has_relationships else ""
+
+        struct_str = f"""
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "{self.name.gql}", rename_fields = "PascalCase"{use_complex})]
+pub struct {self.name.rust} {{
+"""
+
         for prop in self.properties:
             struct_str += tab(line(prop.rust))
         struct_str += line("}")
-        return struct_str
 
-    @property
-    def gql(self) -> str:
-        if self.is_resource:
-            struct_str = f"""
-type {self.name.gql} implements Resource {{
-    CcapiId: String!
-    CcapiTypeName: String!
+        # relationship struct declaration in translate_relationship
+
+        # type_name goes as implementation now
+        struct_str += f"""
+#[ComplexObject(rename_fields = "PascalCase")]
+impl {self.name.rust} {{
+    pub async fn type_name(&self) -> String {{
+        "{self.name.original_name}".to_string()
+    }}
+}}
 """
-        else:
-            struct_str = line(f"type {self.name.gql} {{")
-        for prop in self.properties:
-            struct_str += line(tab(prop.gql))
-        struct_str += line("}")
-        return struct_str
-
-    @property
-    def gql_filter(self) -> str:
-        struct_str = line(f"input {self.name.gql_filter} {{")
-        for prop in self.properties:
-            struct_str += line(tab(prop.gql_filter))
-        struct_str += line("}")
         return struct_str
 
     def __repr__(self):
         return str({self.name: self.properties})
+
+
+class RustEnumInterface(Translatable):
+    """
+    Rust enum which is translated to GraphQL interface and its implementations.
+
+    Only for the purpose of generating GraphQL from Rust types.
+    Looks like this:
+
+    #[derive(Interface, Serialize)]
+    #[graphql(
+        name = "Resource",
+        rename_fields = "PascalCase",
+        field(name = "id", ty = "String"),
+        field(name = "type_name", ty = "String"),
+        field(name = "all_properties", ty = "String"),
+    )]
+    pub enum Resource {
+        AwsLambdaFunction(AwsLambdaFunction),
+        AwsIamRole(AwsIamRole),
+        Node(Node),
+    }
+
+    In GraphQL, it will generate interface
+
+    interface Resource {
+        Id: String!
+        TypeName: String!
+        AllProperties: String!
+    }
+
+    And adds 'implements Resource' to all types in the enum.
+    """
+
+    def __init__(self, name: str = "Resource"):
+        self.name = name
+        self.resources: list[StructName] = []
+
+    def append(self, resource: StructName):
+        self.resources.append(resource)
+
+    @property
+    def rust(self) -> str:
+        enum_str = f"""
+#[derive(Interface, Serialize)]
+#[graphql(
+    name = \"{self.name}\",
+    rename_fields = "PascalCase",
+    field(name = "id", ty = "String"),
+    field(name = "type_name", ty = "String"),
+    field(name = "all_properties", ty = "String"),
+)]
+pub enum Resource {{
+"""
+        for resource in self.resources:
+            enum_str += line(tab(f"{resource.rust}({resource.rust}),"))
+        enum_str += line(tab("Node(Node)"))
+        enum_str += line("}")
+
+        return enum_str
+
+    @property
+    def gql(self) -> str:
+        return ""
+
+
+class RustEnumUnion(Translatable):
+    """
+    Rust enum which is translated to GraphQL union and its implementations.
+
+    Only for the purpose of generating GraphQL from Rust types.
+    Looks like this:
+
+    #[derive(Union, Serialize)]
+    pub enum MyUnion {
+        AwsLambdaFunction(AwsLambdaFunction),
+        AwsIamRole(AwsIamRole),
+        Node(Node),
+    }
+
+    In GraphQL, it will generate union
+
+    union Resource = AwsLambdaFunction | AwsIamRole | Node
+    """
+
+    def __init__(self, name: StructName, rust_types: list[str]):
+        self._property_name = name
+        self.name = f"{self._property_name.rust}Connections"
+        self.types: list[str] = rust_types
+
+    @property
+    def rust(self) -> str:
+        enum_str = f"""
+#[derive(Union, Serialize)]
+pub enum {self.name} {{
+"""
+        for type_ in self.types:
+            enum_str += line(tab(f"{type_}({type_}),"))
+        enum_str += line("}")
+        return enum_str
 
 
 def tab(string: str, number: int = 1, size: int = 4) -> str:
@@ -339,84 +314,349 @@ def line(string: str) -> str:
     return f"{string}\n" if not string.endswith("\n") else string
 
 
-def translate(
-    types_map: TypesMap,
-) -> Iterator[TranslatableAndFilterable | Translatable]:
-    resource_name = types_map["resourceTypeName"]
-    for type_name, type_ in types_map.items():
-        if isinstance(type_, list):
-            enum_name = EnumName(type_name, prefix=resource_name)
-            yield Enum_(enum_name, type_)
-        elif isinstance(type_, dict):
-            struct_name = StructName(type_name, prefix=resource_name)
-            is_resource = type_name == resource_name
-            struct = Struct(struct_name, is_resource=is_resource)
-            for prop_name, prop_type_name in type_.items():
-                prop_type = property_type(prop_type_name, resource_name)
-                prop = Property(prop_type, PropertyName(prop_name))
-                struct.append(prop)
-            yield struct
+@dataclass
+class Relationship:
+    source_property_name: PropertyName
+    rust_to_cfn_type_map: dict[str, list[str]] = field(default_factory=dict)
+    is_source_array: bool = False
 
 
-def translate_resource(
-    types_map: TypesMap,
-) -> tuple[str, str, StructName]:
-    rust_str = """
-use serde::{Serialize, Deserialize};
-use serde_json::Value;
+def translate_relationship(
+    source_type_cfn_notation: str, relationships: list[Relationship]
+) -> str:
+    source_struct_name = StructName(source_type_cfn_notation)
+    template = """
+#[derive(Serialize)]
+pub struct {source_struct_name_rust}Relationships<'a> {{
+    properties: &'a String,
+}}
 
+impl {source_struct_name_rust} {{
+
+    pub async fn relationships(&self) -> {source_struct_name_rust}Relationships {{
+        {source_struct_name_rust}Relationships {{ properties: &self.all_properties }}
+    }}
+
+}}
+{unions}
+#[Object(rename_fields = "PascalCase")]
+impl {source_struct_name_rust}Relationships<'_> {{
+{relationship_functions}
+}}
 """
 
-    gql_str = ""
-    resource_name = None
-    for type_ in translate(types_map):
-        rust_str += type_.rust
-        rust_str += line("")
+    vector_fn_template = """
+    pub async fn {source_property_name_rust}(&self) -> Vec<{return_type}> {{
+        vec![]
+    }}
+"""
 
-        gql_str += type_.gql
-        if isinstance(type_, Struct):
-            gql_str += type_.gql_filter
-            if type_.is_resource:
-                resource_name = type_.name
-        gql_str += line("")
+    single_fn_template = """
+    pub async fn {source_property_name_rust}(&self) -> {return_type} {{
+        {return_expression}
+    }}
+"""
 
-    return rust_str, gql_str, resource_name
+    return_expression_template = """{instance_type}{{
+            {instance_body}
+        }}"""
+
+    wrapped_return_expression_template = """model::{return_type}::{instance_type}({instance_type}{{
+            {instance_body}
+        }})"""
+
+    instance_body_template = """id: "".to_string(),
+            all_properties: "".to_string(),"""
+
+    node_body_template = """id: "".to_string(),
+            type_name: "{type_name_cfn_format}".to_string(),
+            all_properties: "".to_string(),"""
+
+    def has_union_return(rel: Relationship):
+        return len(rel.rust_to_cfn_type_map.keys()) > 1
+
+    def hydrate_instance_body(
+        instance_type_rust_notation: str,
+        rust_to_cfn_type_map: dict[str, list[str]],
+    ):
+        # if there are > 1 cfn types, use any of mapped types as a placeholder
+        type_cfn_notation = rust_to_cfn_type_map[instance_type_rust_notation][0]
+        instance_body = (
+            node_body_template.format(
+                # use any of Node types as a placeholder
+                type_name_cfn_format=type_cfn_notation
+            )
+            if instance_type_rust_notation == "Node"
+            else instance_body_template
+        )
+        return instance_body
+
+    unions: list[RustEnumUnion] = []
+    relationship_functions: list[str] = []
+    for relationship in relationships:
+        # if not a union, there is a single type, otherwise, it will be a random type from union
+        first_rust_type = list(relationship.rust_to_cfn_type_map.keys())[0]
+
+        return_type = first_rust_type
+
+        if has_union_return(relationship):  # need to create a union
+            union = RustEnumUnion(
+                StructName(
+                    relationship.source_property_name.original_name,
+                    prefix=source_type_cfn_notation,
+                ),
+                sorted(list(relationship.rust_to_cfn_type_map.keys())),
+            )
+            unions.append(union)
+            return_type = union.name
+
+        if relationship.is_source_array:
+            fn_template = vector_fn_template.format(
+                source_property_name_rust=relationship.source_property_name.rust,
+                return_type=return_type,
+            )
+        else:
+            # it's either a single item or we use a random type from union as a placeholder
+            instance_type_rust_notation = first_rust_type
+            instance_body = hydrate_instance_body(
+                instance_type_rust_notation, relationship.rust_to_cfn_type_map
+            )
+
+            if has_union_return(relationship):
+                return_expression = wrapped_return_expression_template.format(
+                    return_type=return_type,
+                    instance_type=instance_type_rust_notation,
+                    instance_body=instance_body,
+                )
+            else:
+                return_expression = return_expression_template.format(
+                    instance_type=instance_type_rust_notation,
+                    instance_body=instance_body,
+                )
+
+            fn_template = single_fn_template.format(
+                source_property_name_rust=relationship.source_property_name.rust,
+                return_type=return_type,
+                return_expression=return_expression,
+            )
+
+        relationship_functions.append(fn_template)
+
+    unions_output = "".join(union.rust for union in unions)
+    relationship_functions_output = "".join(fn for fn in relationship_functions)
+    output = template.format(
+        source_struct_name_rust=source_struct_name.rust,
+        unions=unions_output,
+        relationship_functions=relationship_functions_output,
+    )
+
+    return output
 
 
-def translate_gql_common(resources: list[StructName]) -> str:
-    gql_str = """
-interface Resource {
-    CcapiId: String!
-    CcapiTypeName: String!
-}
-
-type Adjacent {
-  Vertex: Resource!
-  Adjacent: [Resource!]
-}
-
-union ReturnResourceType =
-    """
-
-    for i, resource in enumerate(resources):
-        if i == 0:
-            gql_str += line(tab(tab(resource.gql, 2)))
+def translate_types_with_relationships(
+    schema_all_combined: dict[str, Any],
+    filter: frozenset[str] = frozenset(),
+) -> list[Struct]:
+    structs = []
+    for resource_name, resource_data in schema_all_combined.items():
+        if filter and resource_name not in filter:
             continue
-        gql_str += line(tab(f"| {resource.gql}"))
 
-    gql_str += line("")
+        if has_relationships(resource_name, schema_all_combined):
+            structs.append(
+                Struct(
+                    StructName(resource_name),
+                    is_resource=True,
+                    in_relationships=True,
+                )
+            )
+    # it's easier to find smth in sorted list
+    structs.sort(key=lambda x: x.name.original_name)
+    return structs
 
-    gql_str += line("input ResourceFilter {")
-    for resource in resources:
-        gql_str += line(tab(f"{resource.gql}: {resource.gql_filter}"))
-    gql_str += line("}")
 
-    gql_str += """
-type Query {
-  listResources(type: String!): [ReturnResourceType!] 
-  describeResource(id: String!, type: String!): ReturnResourceType
-  graphFrom(id: String!, type: String!): [Adjacent]!
+def translate_all_relationships(
+    all_schema_combined: dict[str, Any],
+    cfn_schema: dict[str, Any],
+    filter: frozenset[str] = frozenset(),
+) -> list[str]:
+    relationships: list[str] = []
+    for source_type_cfn_notation in all_schema_combined:
+        if filter and source_type_cfn_notation not in filter:
+            continue
+
+        try:
+            rel = translate_resource_relationships(
+                source_type_cfn_notation, all_schema_combined, cfn_schema, filter=filter
+            )
+            if rel:
+                relationships.append(rel)
+        except Exception as e:
+            LOG.error("Relationship translation failed. %s", repr(e))
+
+    return relationships
+
+
+def translate_resource_relationships(
+    source_type_cfn_notation: str,
+    all_schema_combined: dict[str, Any],
+    cfn_schema: dict[str, Any],
+    filter: frozenset[str] = frozenset(),
+):
+    relationships: list[Relationship] = []
+    for relation in all_schema_combined[source_type_cfn_notation]["relationships"]:
+        for property_name_with_slashes, references in relation.items():
+            property_name_with_slashes: str
+            references: list[dict[str, Any]]
+            if not references:
+                LOG.error(
+                    "Relationship field doesn't have any references %s %s",
+                    source_type_cfn_notation,
+                    property_name_with_slashes,
+                )
+                continue
+
+            target_type_cfn_notation = list(
+                {
+                    ref["typeName"]
+                    for ref in references
+                    if not filter or filter and ref["typeName"] in filter
+                }
+            )
+            if not target_type_cfn_notation:
+                continue
+
+            is_source_array = is_array(
+                property_name_with_slashes, source_type_cfn_notation, cfn_schema
+            )
+
+            type_name_map: dict[str, list[str]] = {}
+            for type_ in target_type_cfn_notation:
+                rust_name = (
+                    StructName(type_).rust
+                    if has_relationships(type_, all_schema_combined)
+                    else "Node"
+                )
+                if rust_name not in type_name_map:
+                    type_name_map[rust_name] = []
+                type_name_map[rust_name].append(type_)
+
+            property_name = PropertyName(property_name_with_slashes.replace("/", ""))
+
+            relationships.append(
+                Relationship(
+                    source_property_name=property_name,
+                    rust_to_cfn_type_map=type_name_map,
+                    is_source_array=is_source_array,
+                )
+            )
+
+    return (
+        translate_relationship(source_type_cfn_notation, relationships)
+        if relationships
+        else ""
+    )
+
+
+def translate_all(
+    all_schema_combined: dict[str, Any],
+    cfn_schema: dict[str, Any],
+    filter: frozenset[str] = frozenset(),
+) -> str:
+    output = """// =======================================================
+// This file is generated.  Do not edit manually!
+// =======================================================
+use async_graphql::{Context, Enum, Error, Interface, OutputType, SimpleObject, Result, Object, ComplexObject, Union};
+use serde::Serialize;
+"""
+    queries = """
+pub struct Query;
+
+#[Object]
+impl Query {
+    pub async fn resource(&self, id: String, type_name: String) -> Resource {
+        Resource::AwsLambdaFunction(AwsLambdaFunction{
+            id: id,
+            type_name: type_name,
+            all_properties: "{}".to_string(),
+        })
+    }
+
+    pub async fn resources(&self, type_name: String) -> Vec<Resource> {
+        let resources: Vec<Resource> = vec![];
+        resources
+    }
+
+    pub async fn topology(&self, id: String, type_name: String) -> Topology {
+        Topology {
+            nodes: vec![],
+            edges: vec![],
+        }
+    }
+}
+"""
+    interface = RustEnumInterface()
+    number_of_resources_translated = 0
+    structs = translate_types_with_relationships(all_schema_combined, filter=filter)
+    for struct in structs:
+        output += struct.rust
+        number_of_resources_translated += 1
+        interface.append(struct.name)
+
+    LOG.info("Translated %d resources", number_of_resources_translated)
+
+    output += interface.rust
+
+    output += """
+#[derive(SimpleObject, Serialize, Clone)]
+#[graphql(name = "Node", rename_fields = "PascalCase")]
+pub struct Node {
+    pub id: String,
+    pub type_name: String,
+    pub all_properties: String,
 }
 
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "Edge", rename_fields = "PascalCase")]
+pub struct Edge {
+    source: String,
+    target: String,
+    relation: Relation,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Serialize)]
+pub enum Relation {
+    IsRelatedTo,
+}
+
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "Topology", rename_fields = "PascalCase")]
+pub struct Topology {
+    nodes: Vec<Node>,
+    edges: Vec<Edge>,
+}
 """
-    return gql_str
+    output += """
+// =========== Relationships ===========
+"""
+
+    number_of_relationships_translated = 0
+    for relationship in translate_all_relationships(
+        all_schema_combined, cfn_schema, filter=filter
+    ):
+        output += relationship
+        number_of_relationships_translated += 1
+        output += line("")
+
+    LOG.info("Translated %d relationships", number_of_relationships_translated)
+
+    # TODO: Add queries when they are ready
+    # output += queries
+
+    return output
+
+
+def has_relationships(
+    type_name_cfn_format: str, all_schema_combined: dict[str, Any]
+) -> bool:
+    return len(all_schema_combined[type_name_cfn_format]["relationships"]) > 0

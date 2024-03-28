@@ -1,19 +1,17 @@
+test-types: out/model.rs test/src/tools/sdl.rs
+	cp out/model.rs test/src/lib.rs ;\
+	cd test/ ;\
+	cargo build ;\
+	cargo run --bin generate-sdl > schema.graphql
+
 run: src/main.py
 	python src/main.py
-
-merge-schema:
-	cat out/graphql/*.gql > out/graphql/schema.all.gql
-
-show-failures: logs/failures.log
-	less logs/failures.log
 
 clean-logs:
 	rm -f logs/*.log
 
 clean-artifacts:
-	rm -f out/graphql/*.gql
-	rm -f out/model/*.rs
-	rm -f out/map/*.json
+	rm -f out/*.rs
 
 clean-downloads:
 	rm -f cfn/*.json
