@@ -1,13 +1,6 @@
 logs/*.log
-cfn/*.json
-out/model/*.rs
-out/graphql/*.gql
-out/map/*.json
-
-# python
-.venv/
-.pytest_cache/
-__pycache__/
+data/cfn/*.json
+out/*.rs
 
 # Mac
 .DS_Store
