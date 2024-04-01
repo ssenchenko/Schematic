@@ -25,8 +25,35 @@ const (
 	UNTYPED_OBJECT string = "untyped-object" // untyped object
 )
 
+type Dict = map[string]any
+
+func OneStepAtATime(step string, fragment Dict, schema Dict) ([]Dict, error) {
+	if data, ok := fragment[PROPS]; ok { // type == object with properties
+		props := data.(Dict)
+		if result, ok := props[step]; ok {
+			nextDestination := result.(Dict)
+			if _, ok := nextDestination[TYPE]; ok {
+				return []Dict{nextDestination}, nil
+			}
+			if _, ok := nextDestination[REF]; ok {
+				return ResolveRef(nextDestination[REF].(string), schema)
+			}
+			// if it's not TYPE nor REF, it should be ONE_OF or ANY_OF,
+			// if not, ResolveAnyOneOf will take care of the exception
+			return ResolveAnyOneOf(nextDestination, schema)
+		} 
+		// it makes sense because of anyOf/oneOf, we might hit a branch which is not on the path
+		return make([]Dict, 0), nil
+
+	// in cases below step might be found deeper, in array or in $ref
+	} else if data, ok := fragment[TYPE]; ok {
+
+	}
+	
+}
+
 // Resolve ref and return underlying type.
-func ResolveRef(ref string, schema map[string]any) ([]map[string]any, error) {
+func ResolveRef(ref string, schema Dict) ([]Dict, error) {
 	refTypeName, err := ExtractRefTypeName(ref)
 	if err != nil {
 		return nil, err
@@ -34,54 +61,62 @@ func ResolveRef(ref string, schema map[string]any) ([]map[string]any, error) {
 	if _, ok := schema[DEFINITIONS]; !ok {
 		return nil, CreateError(schema, "no definitions found in the schema")
 	}
-	if _, ok := schema[DEFINITIONS].(map[string]any)[refTypeName]; !ok {
-		return nil, CreateError(schema, fmt.Sprintf("no type found for %s in", refTypeName))
+	if _, ok := schema[DEFINITIONS].(Dict)[refTypeName]; !ok {
+		return nil, CreateError(
+			schema[DEFINITIONS].(Dict), 
+			fmt.Sprintf("no type found for %s in", refTypeName),
+		)
 	}
 
-	nextDestination, ok := schema[DEFINITIONS].(map[string]any)[refTypeName].(map[string]any)
+	nextDestination, ok := schema[DEFINITIONS].(Dict)[refTypeName].(Dict)
 	if !ok {
 		return nil, fmt.Errorf("definitions[%s] is not a map[string]any", refTypeName)
 	}
 	if _, ok := nextDestination[TYPE]; ok {
-		return []map[string]any{nextDestination}, nil
+		return []Dict{nextDestination}, nil
 	}
 	if _, ok := nextDestination[REF]; ok {
 		return ResolveRef(nextDestination[REF].(string), schema)
 	}
-	// TODO: resolve anyOf and oneOf
-
-	return nil, CreateError(schema, "oh no, another uncharted terrain")
+	// if it's not TYPE nor REF, it should be ONE_OF or ANY_OF,
+	// if not, ResolveAnyOneOf will take care of the exception
+	return ResolveAnyOneOf(nextDestination, schema)
 }
 
 // Resolve anyOf and oneOf keys.
-func ResolveAnyOneOf(anyOneOf []map[string]any, schema map[string]any) ([]map[string]any, error) {
-	var resolved []map[string]any
+func ResolveAnyOneOf(withAnyOneOf Dict, schema Dict) ([]Dict, error) {
+	var resolved []Dict
 
-	for i, branch := range anyOneOf {
+	anyOf, anyOk := withAnyOneOf[ANY_OF]
+	oneOf, oneOk := withAnyOneOf[ONE_OF]
+	if !anyOk && !oneOk {
+		return nil, CreateError(withAnyOneOf, fmt.Sprintf("no %s or %s found", ANY_OF, ONE_OF))
+	}
+	var anyOneOf []Dict
+	if anyOk {
+		anyOneOf = anyOf.([]Dict)
+	} else {
+		anyOneOf = oneOf.([]Dict)
+	}
+
+	for _, branch := range anyOneOf {
 		if _, ok := branch[TYPE]; ok {
 			resolved = append(resolved, branch)
 		} else if _, ok := branch[REF]; ok {
 			resolvedRef, err := ResolveRef(branch[REF].(string), schema)
 			if err != nil {
-				return nil, CreateError(anyOneOf[i], err.Error())
+				return nil, err
 			}
 			resolved = append(resolved, resolvedRef...)
-		} else if _, ok := branch[ANY_OF]; ok {
-			resolvedAnyOf, err := ResolveAnyOneOf(branch[ANY_OF].([]map[string]any), schema)
+		} else {
+			// if it's not TYPE nor REF, it should be ONE_OF or ANY_OF,
+			// if not, ResolveAnyOneOf will take care of the exception
+			resolvedAnyOf, err := ResolveAnyOneOf(branch, schema)
 			if err != nil {
-				return nil, CreateError(anyOneOf[i], err.Error())
+				return nil, err
 			}
 			resolved = append(resolved, resolvedAnyOf...)
-		} else if _, ok := branch[ONE_OF]; ok {
-			resolvedOneOf, err := ResolveAnyOneOf(branch[ONE_OF].([]map[string]any), schema)
-			if err != nil {
-				return nil, CreateError(anyOneOf[i], err.Error())
-			}
-			resolved = append(resolved, resolvedOneOf...)
-		} else {
-			return nil, CreateError(anyOneOf[i], "unexpected branch")
 		}
-
 	}
 	return resolved, nil
 }
@@ -106,10 +141,10 @@ func ExtractRefTypeName(ref string) (string, error) {
 }
 
 // Create error message with arbitrary json fragment output.
-func CreateError(fragment map[string]any, message string) error {
-	binary, err := json.MarshalIndent(fragment, "", "  ")
+func CreateError(fragment Dict, message string) error {
+	binary, err := json.Marshal(fragment)
 	if err != nil {
 		return fmt.Errorf("damn, I can't marshal the fragment after error %v", err)
 	}
-	return fmt.Errorf("%s\n%v", message, string(binary))
+	return fmt.Errorf("%s %v", message, string(binary))
 }

@@ -2,6 +2,9 @@ logs/*.log
 data/cfn/*.json
 out/*.rs
 
+.venv/
+__pycache__/
+
 # Mac
 .DS_Store
 
