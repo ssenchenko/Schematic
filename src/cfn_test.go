@@ -8,6 +8,18 @@ import (
 
 var schema = Dict{
 	PROPS: Dict{
+		"SimpleArray": Dict{
+			TYPE: ARRAY,
+			ITEMS: Dict{
+				TYPE: STRING,
+			},
+		},
+		"ArrayWithRef": Dict{
+			TYPE: ARRAY,
+			ITEMS: Dict{
+				REF: "#/definitions/RefToString",
+			},
+		},
 		"AnyType": Dict{
 			ANY_OF: []Dict{
 				{TYPE: STRING},
@@ -32,7 +44,7 @@ var schema = Dict{
 				},
 			},
 		},
-		"NoOneOrAny": Dict{TYPE: STRING},
+		"JustString": Dict{TYPE: STRING},
 		"FutureRelationshipLink": Dict{
 			REF: "#/definitions/FutureRelationshipLink",
 		},
@@ -50,7 +62,7 @@ var schema = Dict{
 			"type": "object",
 			"properties": Dict{
 				"KeyId": Dict{
-					"type" : "string",
+					"type": "string",
 					"anyOf": []Dict{
 						{
 							"relationshipRef": Dict{
@@ -85,7 +97,7 @@ func TestExtractRefTypeName(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		actualType, actualErr := ExtractRefTypeName(testCase.ref)
+		actualType, actualErr := extractRefTypeName(testCase.ref)
 
 		if actualType != testCase.expectedType {
 			t.Errorf("For ref %s, expected type %s, but got %s", testCase.ref, testCase.expectedType, actualType)
@@ -139,12 +151,12 @@ func TestResolveRef(t *testing.T) {
 
 func TestResolveAnyOneOf(t *testing.T) {
 	testCases := []struct {
-		fragment      Dict
+		fragment      []Dict
 		expectedTypes []Dict
 		expectedError error
 	}{
 		{
-			fragment: schema[PROPS].(Dict)["AnyType"].(Dict),
+			fragment: schema[PROPS].(Dict)["AnyType"].(Dict)[ANY_OF].([]Dict),
 			expectedTypes: []Dict{
 				{TYPE: STRING},
 				{TYPE: OBJECT},
@@ -152,7 +164,7 @@ func TestResolveAnyOneOf(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			fragment: schema[PROPS].(Dict)["AnyReferences"].(Dict),
+			fragment: schema[PROPS].(Dict)["AnyReferences"].(Dict)[ANY_OF].([]Dict),
 			expectedTypes: []Dict{
 				{TYPE: STRING},
 				{TYPE: STRING},
@@ -162,18 +174,13 @@ func TestResolveAnyOneOf(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			fragment: schema[PROPS].(Dict)["Nested"].(Dict),
+			fragment: schema[PROPS].(Dict)["Nested"].(Dict)[ONE_OF].([]Dict),
 			expectedTypes: []Dict{
 				{TYPE: STRING},
 				{TYPE: BOOL},
 				{TYPE: OBJECT},
 			},
 			expectedError: nil,
-		},
-		{
-			fragment:      schema[PROPS].(Dict)["NoOneOrAny"].(Dict),
-			expectedTypes: nil,
-			expectedError: errors.New(`no anyOf or oneOf found {"type":"string"}`),
 		},
 	}
 
@@ -186,6 +193,62 @@ func TestResolveAnyOneOf(t *testing.T) {
 
 		if (actualError == nil && testCase.expectedError != nil) || (actualError != nil && testCase.expectedError == nil) || (actualError != nil && actualError.Error() != testCase.expectedError.Error()) {
 			t.Errorf("For ref %s, expected error '%v', but got '%v'", testCase.fragment, testCase.expectedError, actualError)
+		}
+	}
+}
+
+func TestOneStepAtATime(t *testing.T) {
+	testCases := []struct {
+		propertyName string
+		fragment     Dict
+		expected     []Dict
+		expectedErr  error
+	}{
+		{
+			propertyName: "JustString",
+			fragment:     schema,
+			expected: []Dict{
+				{TYPE: STRING},
+			},
+			expectedErr: nil,
+		},
+		{
+			propertyName: "AnyReferences",
+			fragment:     schema,
+			expected: []Dict{
+				{TYPE: STRING},
+				{TYPE: STRING},
+				{TYPE: INT},
+				{TYPE: NUMBER},
+			},
+			expectedErr: nil,
+		},
+		{
+			propertyName: "SimpleArray",
+			fragment:     schema,
+			expected: []Dict{
+				{
+					TYPE: ARRAY,
+					ITEMS: Dict{
+						TYPE: STRING,
+					},
+				},
+			},
+			expectedErr: nil,
+		},
+	}
+
+	for _, testCase := range testCases {
+		actual, err := OneStepAtATime(testCase.propertyName, testCase.fragment, schema)
+
+		if err != nil {
+			if testCase.expectedErr == nil {
+				t.Errorf("For property %s, expected no error, but got '%v'", testCase.propertyName, err)
+			} else if err.Error() != testCase.expectedErr.Error() {
+				t.Errorf("For property %s, expected error '%v', but got '%v'", testCase.propertyName, testCase.expectedErr, err)
+			}
+		} else if !reflect.DeepEqual(actual, testCase.expected) {
+			t.Errorf("For property %s, expected %v, but got %v", testCase.propertyName, testCase.expected, actual)
 		}
 	}
 }

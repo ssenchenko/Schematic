@@ -3,6 +3,7 @@ package schematic
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -27,10 +28,10 @@ const (
 
 type Dict = map[string]any
 
-func OneStepAtATime(step string, fragment Dict, schema Dict) ([]Dict, error) {
+func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, error) {
 	if data, ok := fragment[PROPS]; ok { // type == object with properties
 		props := data.(Dict)
-		if result, ok := props[step]; ok {
+		if result, ok := props[propertyName]; ok {
 			nextDestination := result.(Dict)
 			if _, ok := nextDestination[TYPE]; ok {
 				return []Dict{nextDestination}, nil
@@ -38,23 +39,77 @@ func OneStepAtATime(step string, fragment Dict, schema Dict) ([]Dict, error) {
 			if _, ok := nextDestination[REF]; ok {
 				return ResolveRef(nextDestination[REF].(string), schema)
 			}
-			// if it's not TYPE nor REF, it should be ONE_OF or ANY_OF,
-			// if not, ResolveAnyOneOf will take care of the exception
-			return ResolveAnyOneOf(nextDestination, schema)
-		} 
+			if anyOneOf, ok := extractAnyOneOf(nextDestination); ok {
+				return ResolveAnyOneOf(anyOneOf, schema)
+			}
+			return nil, CreateError(nextDestination, "no idea how to handle")
+		}
 		// it makes sense because of anyOf/oneOf, we might hit a branch which is not on the path
 		return make([]Dict, 0), nil
-
-	// in cases below step might be found deeper, in array or in $ref
-	} else if data, ok := fragment[TYPE]; ok {
-
 	}
-	
+
+	// in cases below, propertyName might be found deeper, in array or in $ref
+
+	if type_, ok := fragment[TYPE]; ok {
+		// we get here if previous step was an array and next one is supposed to be in an item of object type
+		stringTypes, isString := type_.(string)
+		// I found 1 case when "type" == ["array", "string"] which looks like a mistake to me,
+		// and it should probably be "oneOf/anyOf" or just "array" instead but
+		// for the time being, it's faster to add this condition
+		// than reach out to the owner and ask for a change
+		arrayTypes, isArray := type_.([]string)
+		if isArray && slices.Contains(arrayTypes, ARRAY) || isString && stringTypes == ARRAY {
+			// keep looking for the same step in the items
+			return OneStepAtATime(propertyName, fragment[ITEMS].(Dict), schema)
+		}
+		// no way to find step, type is neither typed object nor array
+		return make([]Dict, 0), nil
+	}
+
+	// we get here if the previous step led us to array which 'item' is '$ref'
+	if ref, ok := fragment[REF]; ok {
+		// first resolve ref
+		types, err := ResolveRef(ref.(string), schema)
+		if err != nil {
+			return nil, err
+		}
+		// then keep looking for the step in the resolved type(s)
+		results := make([]Dict, 1)
+		for _, t := range types {
+			res, err := OneStepAtATime(propertyName, t, schema)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, res...)
+		}
+		return results, nil
+	}
+
+	// we get here if the previous step led us to array which 'item' is oneOf/anyOf
+	if anyOneOf, ok := extractAnyOneOf(fragment[ITEMS].(Dict)); ok {
+		// resolve to an actual type(s)
+		types, err := ResolveAnyOneOf(anyOneOf, schema)
+		if err != nil {
+			return nil, err
+		}
+		// look for our property name
+		results := make([]Dict, 1)
+		for _, t := range types {
+			res, err := OneStepAtATime(propertyName, t, schema)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, res...)
+		}
+		return results, nil
+	}
+
+	return nil, CreateError(fragment, "no idea how to handle")
 }
 
 // Resolve ref and return underlying type.
 func ResolveRef(ref string, schema Dict) ([]Dict, error) {
-	refTypeName, err := ExtractRefTypeName(ref)
+	refTypeName, err := extractRefTypeName(ref)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +118,7 @@ func ResolveRef(ref string, schema Dict) ([]Dict, error) {
 	}
 	if _, ok := schema[DEFINITIONS].(Dict)[refTypeName]; !ok {
 		return nil, CreateError(
-			schema[DEFINITIONS].(Dict), 
+			schema[DEFINITIONS].(Dict),
 			fmt.Sprintf("no type found for %s in", refTypeName),
 		)
 	}
@@ -72,32 +127,22 @@ func ResolveRef(ref string, schema Dict) ([]Dict, error) {
 	if !ok {
 		return nil, fmt.Errorf("definitions[%s] is not a map[string]any", refTypeName)
 	}
+
 	if _, ok := nextDestination[TYPE]; ok {
 		return []Dict{nextDestination}, nil
 	}
 	if _, ok := nextDestination[REF]; ok {
 		return ResolveRef(nextDestination[REF].(string), schema)
 	}
-	// if it's not TYPE nor REF, it should be ONE_OF or ANY_OF,
-	// if not, ResolveAnyOneOf will take care of the exception
-	return ResolveAnyOneOf(nextDestination, schema)
+	if anyOneOf, ok := extractAnyOneOf(nextDestination); ok {
+		return ResolveAnyOneOf(anyOneOf, schema)
+	}
+	return nil, CreateError(nextDestination, "no idea how to handle")
 }
 
 // Resolve anyOf and oneOf keys.
-func ResolveAnyOneOf(withAnyOneOf Dict, schema Dict) ([]Dict, error) {
+func ResolveAnyOneOf(anyOneOf []Dict, schema Dict) ([]Dict, error) {
 	var resolved []Dict
-
-	anyOf, anyOk := withAnyOneOf[ANY_OF]
-	oneOf, oneOk := withAnyOneOf[ONE_OF]
-	if !anyOk && !oneOk {
-		return nil, CreateError(withAnyOneOf, fmt.Sprintf("no %s or %s found", ANY_OF, ONE_OF))
-	}
-	var anyOneOf []Dict
-	if anyOk {
-		anyOneOf = anyOf.([]Dict)
-	} else {
-		anyOneOf = oneOf.([]Dict)
-	}
 
 	for _, branch := range anyOneOf {
 		if _, ok := branch[TYPE]; ok {
@@ -108,21 +153,21 @@ func ResolveAnyOneOf(withAnyOneOf Dict, schema Dict) ([]Dict, error) {
 				return nil, err
 			}
 			resolved = append(resolved, resolvedRef...)
-		} else {
-			// if it's not TYPE nor REF, it should be ONE_OF or ANY_OF,
-			// if not, ResolveAnyOneOf will take care of the exception
-			resolvedAnyOf, err := ResolveAnyOneOf(branch, schema)
+		} else if nestedAnyOne, ok := extractAnyOneOf(branch); ok {
+			resolvedAnyOf, err := ResolveAnyOneOf(nestedAnyOne, schema)
 			if err != nil {
 				return nil, err
 			}
 			resolved = append(resolved, resolvedAnyOf...)
+		} else {
+			return nil, CreateError(branch, "no idea how to handle")
 		}
 	}
 	return resolved, nil
 }
 
 // Extracts the type name from "#/definitions/<TypeName>".
-func ExtractRefTypeName(ref string) (string, error) {
+func extractRefTypeName(ref string) (string, error) {
 	err := fmt.Errorf("unexpected ref: %s", ref)
 
 	if ref == "" {
@@ -147,4 +192,15 @@ func CreateError(fragment Dict, message string) error {
 		return fmt.Errorf("damn, I can't marshal the fragment after error %v", err)
 	}
 	return fmt.Errorf("%s %v", message, string(binary))
+}
+
+// Extracts anyOf or oneOf from a fragment.
+func extractAnyOneOf(fragment Dict) ([]Dict, bool) {
+	if anyOneOf, ok := fragment[ANY_OF]; ok {
+		return anyOneOf.([]Dict), true
+	}
+	if anyOneOf, ok := fragment[ONE_OF]; ok {
+		return anyOneOf.([]Dict), true
+	}
+	return nil, false
 }
