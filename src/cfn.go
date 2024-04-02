@@ -23,10 +23,27 @@ const (
 	NUMBER         string = "number"
 	BOOL           string = "boolean"
 	INT            string = "integer"
+	NULL		   string = "null" // doesn't seem to be used
 	UNTYPED_OBJECT string = "untyped-object" // untyped object
 )
 
+type TypeBits uint8
+
+const (
+	BOOLB   TypeBits = 1 << iota
+	INTB	TypeBits = 1 << iota
+	NUMBERB TypeBits = 1 << iota
+	STRINGB TypeBits = 1 << iota
+	ARRAYB  TypeBits = 1 << iota
+	OBJECTB TypeBits = 1 << iota
+)
+
 type Dict = map[string]any
+
+func FollowPath(path string, schema Dict) (map[TypeBits]bool, error) {
+	steps := strings.Split(path, ".")
+	
+}
 
 func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, error) {
 	if data, ok := fragment[PROPS]; ok { // type == object with properties
@@ -36,8 +53,8 @@ func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, er
 			if _, ok := nextDestination[TYPE]; ok {
 				return []Dict{nextDestination}, nil
 			}
-			if _, ok := nextDestination[REF]; ok {
-				return ResolveRef(nextDestination[REF].(string), schema)
+			if refString, ok := nextDestination[REF]; ok {
+				return ResolveRef(refString.(string), schema)
 			}
 			if anyOneOf, ok := extractAnyOneOf(nextDestination); ok {
 				return ResolveAnyOneOf(anyOneOf, schema)
@@ -131,8 +148,8 @@ func ResolveRef(ref string, schema Dict) ([]Dict, error) {
 	if _, ok := nextDestination[TYPE]; ok {
 		return []Dict{nextDestination}, nil
 	}
-	if _, ok := nextDestination[REF]; ok {
-		return ResolveRef(nextDestination[REF].(string), schema)
+	if refString, ok := nextDestination[REF]; ok {
+		return ResolveRef(refString.(string), schema)
 	}
 	if anyOneOf, ok := extractAnyOneOf(nextDestination); ok {
 		return ResolveAnyOneOf(anyOneOf, schema)
@@ -147,8 +164,8 @@ func ResolveAnyOneOf(anyOneOf []Dict, schema Dict) ([]Dict, error) {
 	for _, branch := range anyOneOf {
 		if _, ok := branch[TYPE]; ok {
 			resolved = append(resolved, branch)
-		} else if _, ok := branch[REF]; ok {
-			resolvedRef, err := ResolveRef(branch[REF].(string), schema)
+		} else if refString, ok := branch[REF]; ok {
+			resolvedRef, err := ResolveRef(refString.(string), schema)
 			if err != nil {
 				return nil, err
 			}
@@ -203,4 +220,23 @@ func extractAnyOneOf(fragment Dict) ([]Dict, bool) {
 		return anyOneOf.([]Dict), true
 	}
 	return nil, false
+}
+
+func typeBitsFromJsonType(jsonType string) (TypeBits, error) {
+	switch jsonType {
+	case BOOL:
+		return BOOLB, nil
+	case INT:
+		return INTB, nil
+	case NUMBER:
+		return NUMBERB, nil
+	case STRING:
+		return STRINGB, nil
+	case ARRAY:
+		return ARRAYB, nil
+	case OBJECT:
+		return OBJECTB, nil
+	default:
+		return 0, fmt.Errorf("unexpected json type: %s", jsonType)
+	}
 }
