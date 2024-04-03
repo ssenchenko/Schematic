@@ -2,12 +2,25 @@ package schematic
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 )
 
 var schema = Dict{
 	PROPS: Dict{
+		"ConfusingType": Dict{
+			ONE_OF: []Dict{
+				{REF: "#/definitions/SomeObject"},
+				{REF: "#/definitions/AnotherObject"},
+			},
+		},
+		"MoreConfusingType": Dict{
+			ONE_OF: []Dict{
+				{REF: "#/definitions/AnotherObject"},
+				{REF: "#/definitions/SimpleString"},
+			},
+		},
 		"SimpleArray": Dict{
 			TYPE: ARRAY,
 			ITEMS: Dict{
@@ -18,6 +31,39 @@ var schema = Dict{
 			TYPE: ARRAY,
 			ITEMS: Dict{
 				REF: "#/definitions/RefToString",
+			},
+		},
+		"ArrayWithObject": Dict{
+			TYPE: ARRAY,
+			ITEMS: Dict{
+				REF: "#/definitions/SomeObject",
+			},
+		},
+		"UntypedObject": Dict{
+			TYPE: OBJECT,
+		},
+		"UntypedWeirdObject": Dict{
+			TYPE: []string{OBJECT, STRING},
+		},
+		"ArrayWithWeirdType": Dict{
+			TYPE: []string{ARRAY, STRING},
+			ITEMS: Dict{
+				TYPE: NUMBER,
+			},
+		},
+		"DeepArrayWithWeirdType": Dict{
+			TYPE: []string{ARRAY, STRING},
+			ITEMS: Dict{
+				REF: "#/definitions/AnotherObject",
+			},
+		},
+		"ArrayWithOne": Dict{
+			TYPE: ARRAY,
+			ITEMS: Dict{
+				ONE_OF: []Dict{
+					{REF: "#/definitions/SomeObject"},
+					{REF: "#/definitions/SimpleString"},
+				},
 			},
 		},
 		"AnyType": Dict{
@@ -48,8 +94,32 @@ var schema = Dict{
 		"FutureRelationshipLink": Dict{
 			REF: "#/definitions/FutureRelationshipLink",
 		},
+		"ShouldNotHappen": Dict{
+			"Unexpected": Dict{
+				"Stuff": "WTF",
+			},
+		},
 	},
 	DEFINITIONS: Dict{
+		"SomeObject": Dict{
+			TYPE: OBJECT,
+			PROPS: Dict{
+				"SomeProperty": Dict{
+					TYPE: INT,
+				},
+			},
+		},
+		"AnotherObject": Dict{
+			TYPE: OBJECT,
+			PROPS: Dict{
+				"ArrayProperty": Dict{
+					TYPE: ARRAY,
+					ITEMS: Dict{
+						REF: "#/definitions/SomeObject",
+					},
+				},
+			},
+		},
 		"SimpleString": Dict{TYPE: STRING},
 		"RefToString":  Dict{REF: "#/definitions/SimpleString"},
 		"RefWithAny": Dict{
@@ -132,7 +202,7 @@ func TestResolveRef(t *testing.T) {
 		{
 			ref:           "#/definitions/invalidType",
 			expectedTypes: nil,
-			expectedError: errors.New(`no type found for invalidType in {"FutureRelationshipLink":{"properties":{"KeyId":{"anyOf":[{"relationshipRef":{"propertyPath":"/properties/Arn","typeName":"AWS::KMS::Key"}},{"relationshipRef":{"propertyPath":"/properties/KeyId","typeName":"AWS::KMS::Key"}}],"type":"string"}},"type":"object"},"RefToString":{"$ref":"#/definitions/SimpleString"},"RefWithAny":{"anyOf":[{"type":"integer"},{"type":"number"}]},"SimpleString":{"type":"string"}}`),
+			expectedError: fmt.Errorf("no type found for invalidType in %s", schema[DEFINITIONS].(Dict)),
 		},
 	}
 
@@ -236,6 +306,16 @@ func TestOneStepAtATime(t *testing.T) {
 			},
 			expectedErr: nil,
 		},
+		{
+			propertyName: "SomeProperty",
+			fragment:     schema[PROPS].(Dict)["ArrayWithObject"].(Dict),
+			expected: []Dict{
+				{
+					TYPE: INT,
+				},
+			},
+			expectedErr: nil,
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -249,6 +329,140 @@ func TestOneStepAtATime(t *testing.T) {
 			}
 		} else if !reflect.DeepEqual(actual, testCase.expected) {
 			t.Errorf("For property %s, expected %v, but got %v", testCase.propertyName, testCase.expected, actual)
+		}
+	}
+}
+
+func TestFollowPath(t *testing.T) {
+	testCases := []struct {
+		path        string
+		expected    map[TypeBits]bool
+		expectedErr error
+	}{
+		{
+			path: "JustString",
+			expected: map[TypeBits]bool{
+				OBJECTB | STRINGB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "SimpleArray",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ArrayWithRef",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "AnyReferences",
+			expected: map[TypeBits]bool{
+				OBJECTB | STRINGB: true,
+				OBJECTB | INTB:    true,
+				OBJECTB | NUMBERB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ArrayWithObject/SomeProperty",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB | INTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ArrayWithOne/SomeProperty",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB | INTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ConfusingType/SomeProperty",
+			expected: map[TypeBits]bool{
+				OBJECTB | INTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ConfusingType/ArrayProperty/SomeProperty",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB | INTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "MoreConfusingType",
+			expected: map[TypeBits]bool{
+				OBJECTB | STRINGB: true,
+				OBJECTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "MoreConfusingType/ArrayProperty/SomeProperty",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB | INTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "NonexistantProperty",
+			expected: map[TypeBits]bool{},
+			expectedErr: nil,
+		},
+		{
+			path: "UntypedObject",
+			expected: map[TypeBits]bool{
+				OBJECTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "UntypedWeirdObject",
+			expected: map[TypeBits]bool{
+				OBJECTB | STRINGB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ArrayWithWeirdType",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB | STRINGB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "DeepArrayWithWeirdType/ArrayProperty/SomeProperty",
+			expected: map[TypeBits]bool{
+				OBJECTB | ARRAYB | STRINGB | INTB: true,
+			},
+			expectedErr: nil,
+		},
+		{
+			path: "ShouldNotHappen/Unexpected",
+			expected: nil,
+			expectedErr: fmt.Errorf("no idea how to handle %s", schema["ShouldNotHappen"]),
+		},
+	}
+
+	for _, testCase := range testCases {
+		actual, err := FollowPath(testCase.path, schema)
+
+		if err != nil {
+			if testCase.expectedErr == nil {
+				t.Errorf("For path %s, expected no error, but got '%v'", testCase.path, err)
+			} else if err.Error() != testCase.expectedErr.Error() {
+				t.Errorf("For path %s, expected error '%v', but got '%v'", testCase.path, testCase.expectedErr, err)
+			}
+		} else if !reflect.DeepEqual(actual, testCase.expected) {
+			t.Errorf("For path %s, expected %v, but got %v", testCase.path, testCase.expected, actual)
 		}
 	}
 }
