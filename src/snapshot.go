@@ -12,6 +12,7 @@ const (
 	TEMPLATE_DIR string = "./templates"
 )
 
+// Hydrate template for snapshot testing.
 func hydrate[T any](templateData T, templateFileName string) (string, error) {
 	tmpl, err := template.
 		New(templateFileName).
@@ -27,7 +28,8 @@ func hydrate[T any](templateData T, templateFileName string) (string, error) {
 	return out.String(), nil
 }
 
-func loadSnapshot(snapshotFileName string) (string, error){
+// Load snapshot for snapshot testing.
+func loadSnapshot(snapshotFileName string) (string, error) {
 	content, err := os.ReadFile(
 		fmt.Sprintf("%s/%s", SNAPSHOT_DIR, snapshotFileName))
 	if err != nil {

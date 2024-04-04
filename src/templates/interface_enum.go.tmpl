@@ -8,6 +8,6 @@
 )]
 pub enum Resource {
     {{- range . }}
-    {{ RustResourceName }}({{ RustResourceName }}),
+    {{ .RustResourceName }}({{ .RustResourceName }}),
     {{- end }}
 }

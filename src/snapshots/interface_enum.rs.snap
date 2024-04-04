@@ -7,7 +7,6 @@
     field(name = "all_properties", ty = "String"),
 )]
 pub enum Resource {
-    AwsLambdaFunction(AwsLambdaFunction),
-    AwsIamRole(AwsIamRole),
-    Node(Node),
+    AwsCloudWatchAlarm(AwsCloudWatchAlarm),
+    AwsEc2Instance(AwsEc2Instance),
 }

@@ -1,0 +1,37 @@
+#[derive(Serialize)]
+pub struct {{ .Source.RustResourceName }}Relationships {
+    id: String,
+    type_name: String,
+    properties: String,
+}
+
+impl {{ .Source.RustResourceName }} {
+    pub async fn relationships(&self) -> {{ .Source.RustResourceName }}Relationships {
+        {{ .Source.RustResourceName }}Relationships { 
+            id: &self.id,
+            type_name: &self.type_name,
+            properties: &self.all_properties,
+        }
+    }
+}
+
+{{- range .Relationships }}
+    {{- with .(*TargetUnion) }}
+        {{- template "union_enum.go.tmpl" .(*TargetUnion) }}
+    {{- end }}
+{{- end }}
+
+#[Object(rename_fields = "PascalCase")]
+impl {{ .Source.RustResourceName }}Relationships<'_> {
+    {{- range .Relationships }}
+    pub async fn {{ .SourceProperty.RustPropertyName }}(&self, ctx: &Context<'_>) -> {{ .RustReturnType }} {
+        let atx_context = ctx.data::<AtsContext>()?;
+        get_related_resource::<{{ .RustGenericType }}>(
+            &atx_context,
+            &self.id,
+            &self.type_name,
+            &self.properties, 
+        ).await?
+    }
+    {{- end }}
+}

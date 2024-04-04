@@ -1,0 +1,38 @@
+#[derive(Serialize)]
+pub struct AwsIamInstanceProfileRelationships<'a> {
+    id: &'a String,
+    type_name: &'a String,
+    properties: &'a String,
+}
+
+impl AwsIamInstanceProfile {
+    pub async fn relationships(&self) -> AwsIamInstanceProfileRelationships {
+        AwsIamInstanceProfileRelationships { 
+            id: &self.id,
+            type_name: &self.type_name,
+            properties: &self.all_properties,
+        }
+    }
+}
+
+#[Object(rename_fields = "PascalCase")]
+impl AwsIamInstanceProfileRelationships<'_> {
+    pub async fn roles(&self, ctx: &Context<'_>) -> Vec<AwsIamRole> {
+        let atx_context = ctx.data::<AtsContext>()?;
+            get_related_resource::<Vec<AwsIamRole>>(
+                &atx_context,
+                &self.id,
+                &self.type_name,
+                &self.properties, 
+            ).await?
+    }
+    pub async fn instance_profile_name(&self, ctx: &Context<'_>) -> Option<AwsIamRole> {
+        let atx_context = ctx.data::<AtsContext>()?;
+            get_related_resource::<AwsIamRole>(
+                &atx_context,
+                &self.id,
+                &self.type_name,
+                &self.properties, 
+            ).await?
+    }
+}

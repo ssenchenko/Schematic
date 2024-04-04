@@ -26,3 +26,20 @@ type ResourceProperty struct {
 	RustPropertyName string
 	RustPropertyType string
 }
+
+type ResourceUnion struct {
+	RustUnionName string
+	Resources []ResourceType
+}
+
+type ResourceConnections struct {
+	Source ResourceType
+	Relationships []ResourceRelationship
+}
+
+type ResourceRelationship struct {
+	SourceProperty ResourceProperty
+	RustReturnType string
+	RustGenericType string
+	TargetUnion *ResourceUnion
+}

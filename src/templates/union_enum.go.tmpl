@@ -1,0 +1,6 @@
+#[derive(Union, Serialize)]
+pub enum {{ .RustUnionName }} {
+    {{- range .Resources }}
+    {{ .RustResourceName }}({{ .RustResourceName }}),
+    {{- end }}
+}
