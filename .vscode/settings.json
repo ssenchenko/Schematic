@@ -1,5 +1,6 @@
 {
     "gopls": {
+        "formatting.gofumpt": true,
         "ui.semanticTokens": true
     },
     "[go]": {

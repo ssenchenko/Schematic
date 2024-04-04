@@ -9,6 +9,17 @@ import (
 
 var schema = Dict{
 	PROPS: Dict{
+		"NotDefined": Dict{
+			ONE_OF: []Dict{
+				{TYPE: STRING},
+				{
+					TYPE: ARRAY,
+					ITEMS: Dict{
+						TYPE: STRING,
+					},
+				},
+			},
+		},
 		"ConfusingType": Dict{
 			ONE_OF: []Dict{
 				{REF: "#/definitions/SomeObject"},
@@ -401,7 +412,7 @@ func TestFollowPath(t *testing.T) {
 			path: "MoreConfusingType",
 			expected: map[TypeBits]bool{
 				OBJECTB | STRINGB: true,
-				OBJECTB: true,
+				OBJECTB:           true,
 			},
 			expectedErr: nil,
 		},
@@ -413,8 +424,8 @@ func TestFollowPath(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			path: "NonexistantProperty",
-			expected: map[TypeBits]bool{},
+			path:        "NonexistantProperty",
+			expected:    map[TypeBits]bool{},
 			expectedErr: nil,
 		},
 		{
@@ -446,14 +457,66 @@ func TestFollowPath(t *testing.T) {
 			expectedErr: nil,
 		},
 		{
-			path: "ShouldNotHappen/Unexpected",
-			expected: nil,
-			expectedErr: fmt.Errorf("no idea how to handle %s", schema["ShouldNotHappen"]),
+			path:        "ShouldNotHappen/Unexpected",
+			expected:    nil,
+			expectedErr: fmt.Errorf("error in path ShouldNotHappen/Unexpected no idea how to handle %s", schema[PROPS].(Dict)["ShouldNotHappen"]),
 		},
 	}
 
 	for _, testCase := range testCases {
 		actual, err := FollowPath(testCase.path, schema)
+
+		if err != nil {
+			if testCase.expectedErr == nil {
+				t.Errorf("For path %s, expected no error, but got '%v'", testCase.path, err)
+			} else if err.Error() != testCase.expectedErr.Error() {
+				t.Errorf("For path %s, expected error '%v', but got '%v'", testCase.path, testCase.expectedErr, err)
+			}
+		} else if !reflect.DeepEqual(actual, testCase.expected) {
+			t.Errorf("For path %s, expected %v, but got %v", testCase.path, testCase.expected, actual)
+		}
+	}
+}
+
+func TestIsArray(t *testing.T) {
+	var resources = map[string]Dict{
+		"AWS::Test::Test": schema,
+	}
+	testCases := []struct {
+		path        string
+		expected    bool
+		expectedErr error
+	}{
+		{
+			path:        "JustString",
+			expected:    false,
+			expectedErr: nil,
+		},
+		{
+			path:        "SimpleArray",
+			expected:    true,
+			expectedErr: nil,
+		},
+		{
+			path:        "NotDefined",
+			expected:    false,
+			expectedErr: fmt.Errorf(
+				"what should I do with it? %s in %s has branches; some of them end with array and some - don't", "NotDefined", "AWS::Test::Test"),
+		},
+		{
+			path:        "NonexistantProperty",
+			expected:    false,
+			expectedErr: fmt.Errorf("no type found for %s in %s", "NonexistantProperty", "AWS::Test::Test"),
+		},
+		{
+			path:        "ShouldNotHappen/Unexpected",
+			expected:    false,
+			expectedErr: fmt.Errorf("error in path ShouldNotHappen/Unexpected no idea how to handle %s", schema[PROPS].(Dict)["ShouldNotHappen"]),
+		},
+	}
+
+	for _, testCase := range testCases {
+		actual, err := IsArray(testCase.path, "AWS::Test::Test", resources)
 
 		if err != nil {
 			if testCase.expectedErr == nil {

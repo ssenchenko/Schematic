@@ -40,6 +40,32 @@ const (
 
 type Dict map[string]any
 
+func IsArray(pathToProperty string, typeNameCfnFormat string, schema map[string]Dict) (bool, error) {
+	types, err := FollowPath(pathToProperty, schema[typeNameCfnFormat])
+	if err != nil {
+		return false, err
+	}
+	if len(types) == 0 {
+		return false, fmt.Errorf("no type found for %s in %s", pathToProperty, typeNameCfnFormat)
+	}
+	arrayTest := make([]bool, len(types))
+	counter := 0
+	allAreSame := true
+	for typeBit := range types {
+		arrayTest[counter] = typeBit&ARRAYB == ARRAYB
+		if arrayTest[counter] != arrayTest[0] {
+			allAreSame = false
+			break
+		}
+		counter++
+	}
+	if !allAreSame {
+		return false, fmt.Errorf(
+			"what should I do with it? %s in %s has branches; some of them end with array and some - don't", pathToProperty, typeNameCfnFormat)
+	}
+	return arrayTest[0], nil
+}
+
 func FollowPath(path string, schema Dict) (map[TypeBits]bool, error) {
 	propertyNames := strings.Split(path, "/")
 	var propertyNumberInPath int = 0
