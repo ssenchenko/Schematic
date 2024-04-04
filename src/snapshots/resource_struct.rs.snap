@@ -1,0 +1,13 @@
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "Aws_S3_Bucket", rename_fields = "PascalCase", complex)]
+pub struct AwsS3Bucket {
+    pub id: String,
+    pub all_properties: String,
+}
+
+#[ComplexObject(rename_fields = "PascalCase")]
+impl AwsS3Bucket {
+    pub async fn type_name(&self) -> String {
+        "AWS::S3::Bucket".to_string()
+    }
+}

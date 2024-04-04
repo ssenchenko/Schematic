@@ -13,3 +13,16 @@ type Resourse struct {
 }
 
 type SchemaCombined = map[string]Resourse
+
+type ResourceType struct {
+	CfnResourceName     string
+	RustResourceName    string
+	GraphQlResourceName string
+	UseComplex          string
+	Properties          []ResourceProperty
+}
+
+type ResourceProperty struct {
+	RustPropertyName string
+	RustPropertyType string
+}
