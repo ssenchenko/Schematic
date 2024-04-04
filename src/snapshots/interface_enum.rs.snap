@@ -1,0 +1,13 @@
+#[derive(Interface, Serialize)]
+#[graphql(
+    name = "Resource",
+    rename_fields = "PascalCase",
+    field(name = "id", ty = "String"),
+    field(name = "type_name", ty = "String"),
+    field(name = "all_properties", ty = "String"),
+)]
+pub enum Resource {
+    AwsLambdaFunction(AwsLambdaFunction),
+    AwsIamRole(AwsIamRole),
+    Node(Node),
+}

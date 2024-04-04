@@ -12,7 +12,7 @@ const (
 	TEMPLATE_DIR string = "./templates"
 )
 
-func hydrateResourceStruct(resource ResourceType, templateFileName string) (string, error) {
+func hydrate[T any](templateData T, templateFileName string) (string, error) {
 	tmpl, err := template.
 		New(templateFileName).
 		ParseFiles(fmt.Sprintf("%s/%s", TEMPLATE_DIR, templateFileName))
@@ -20,7 +20,7 @@ func hydrateResourceStruct(resource ResourceType, templateFileName string) (stri
 		return "", err
 	}
 	var out bytes.Buffer
-	err = tmpl.Execute(&out, resource)
+	err = tmpl.Execute(&out, templateData)
 	if err != nil {
 		return "", err
 	}

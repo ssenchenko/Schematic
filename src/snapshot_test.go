@@ -29,7 +29,7 @@ func TestHydrateResourceStruct(t *testing.T) {
 		t.Errorf("cannot load snapshot %s %v", snapshotFileName, err)
 	}
 
-	actual, err := hydrateResourceStruct(testResource, templateFileName)
+	actual, err := hydrate[ResourceType](testResource, templateFileName)
 	if err != nil {
 		t.Errorf("For %s, expected no error but got %v", templateFileName, err)
 	} else if actual != expected {
