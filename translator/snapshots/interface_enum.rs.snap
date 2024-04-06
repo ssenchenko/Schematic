@@ -9,4 +9,5 @@
 pub enum Resource {
     AwsCloudWatchAlarm(AwsCloudWatchAlarm),
     AwsEc2Instance(AwsEc2Instance),
+    Node(Node),
 }

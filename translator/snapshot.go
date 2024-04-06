@@ -1,4 +1,4 @@
-package schematic
+package translator
 
 import (
 	"bytes"
@@ -9,17 +9,26 @@ import (
 
 const (
 	SNAPSHOT_DIR string = "./snapshots"
-	TEMPLATE_DIR string = "./templates"
 )
 
 // Hydrate template for snapshot testing.
-func hydrate[T any](templateData T, templateFileName string) (string, error) {
-	tmpl, err := template.
-		New(templateFileName).
-		ParseFiles(fmt.Sprintf("%s/%s", TEMPLATE_DIR, templateFileName))
+func hydrate[T any](templateData T, templateNames ...string) (string, error) {
+	if len(templateNames) == 0 {
+		return "", fmt.Errorf("template name is required")
+	}
+
+	templateFileNames := make([]string, len(templateNames))
+	for i, name := range templateNames {
+		templateFileNames[i] = fmt.Sprintf("%s/%s", TEMPLATE_DIR, name)
+	}
+
+	tmpl, err := template.New(templateNames[0]).
+		Funcs(template.FuncMap{"DerefResourceUnion": Deref[ResourceUnion]}).
+		ParseFiles(templateFileNames...)
 	if err != nil {
 		return "", err
 	}
+
 	var out bytes.Buffer
 	err = tmpl.Execute(&out, templateData)
 	if err != nil {

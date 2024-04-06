@@ -7,7 +7,7 @@ pub struct AwsEc2SecurityGroupRelationships<'a> {
 
 impl AwsEc2SecurityGroup {
     pub async fn relationships(&self) -> AwsEc2SecurityGroupRelationships {
-        AwsEc2SecurityGroupRelationships { 
+        AwsEc2SecurityGroupRelationships {
             id: &self.id,
             type_name: &self.type_name,
             properties: &self.all_properties,
@@ -16,7 +16,7 @@ impl AwsEc2SecurityGroup {
 }
 
 #[derive(Union, Serialize)]
-pub enum AwsEc2SecurityGroupSecurityGroupIngressSourceSecurityGroupIdConnections {
+pub enum AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId {
     AwsEc2SecurityGroup(AwsEc2SecurityGroup),
     Node(Node),
 }
@@ -25,20 +25,20 @@ pub enum AwsEc2SecurityGroupSecurityGroupIngressSourceSecurityGroupIdConnections
 impl AwsEc2SecurityGroupRelationships<'_> {
     pub async fn security_group_ingress_source_security_group_name(&self, ctx: &Context<'_>) -> Vec<AwsEc2SecurityGroup> {
         let atx_context = ctx.data::<AtsContext>()?;
-            get_related_resource::<Vec<AwsEc2SecurityGroup>>(
-                &atx_context,
-                &self.id,
-                &self.type_name,
-                &self.properties, 
-            ).await?
+        get_related_resource::<Vec<AwsEc2SecurityGroup>>(
+            &atx_context,
+            &self.id,
+            &self.type_name,
+            &self.properties,
+        ).await?
     }
-    pub async fn security_group_ingress_source_security_group_id(&self, ctx: &Context<'_>) -> Vec<AwsEc2SecurityGroupSecurityGroupIngressSourceSecurityGroupIdConnections> {
+    pub async fn security_group_ingress_source_security_group_id(&self, ctx: &Context<'_>) -> Vec<AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId> {
         let atx_context = ctx.data::<AtsContext>()?;
-            get_related_resource::<Vec<AwsEc2SecurityGroupSecurityGroupIngressSourceSecurityGroupIdConnections>>(
-                &atx_context,
-                &self.id,
-                &self.type_name,
-                &self.properties, 
-            ).await?
+        get_related_resource::<Vec<AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId>>(
+            &atx_context,
+            &self.id,
+            &self.type_name,
+            &self.properties,
+        ).await?
     }
 }

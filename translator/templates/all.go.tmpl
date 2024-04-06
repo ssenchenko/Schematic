@@ -1,0 +1,45 @@
+// =======================================================
+// This file is generated. Do not edit manually!
+// =======================================================
+use async_graphql::{Context, Enum, Error, Interface, OutputType, SimpleObject, Result, Object, ComplexObject, Union};
+use serde::Serialize;
+
+{{ range .Resources }}
+    {{- template "resource_struct.go.tmpl" . }}
+{{ end }}
+{{ with .Resources }}
+    {{- template "interface_enum.go.tmpl" . }}
+{{- end }}
+#[derive(SimpleObject, Serialize, Clone)]
+#[graphql(name = "Node", rename_fields = "PascalCase")]
+pub struct Node {
+    pub id: String,
+    pub type_name: String,
+    pub all_properties: String,
+}
+
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "Edge", rename_fields = "PascalCase")]
+pub struct Edge {
+    source: String,
+    target: String,
+    relation: Relation,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Serialize)]
+pub enum Relation {
+    IsRelatedTo,
+}
+
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "Topology", rename_fields = "PascalCase")]
+pub struct Topology {
+    nodes: Vec<Node>,
+    edges: Vec<Edge>,
+}
+
+// =========== Relationships ===========
+
+{{ range .Connections }}
+    {{- template "relationship.go.tmpl" . }}
+{{- end }}

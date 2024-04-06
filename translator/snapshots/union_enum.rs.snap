@@ -1,5 +1,5 @@
 #[derive(Union, Serialize)]
-pub enum AwsEc2InstanceSecurityGroupIdsConnections {
+pub enum AwsEc2InstanceConnections_SecurityGroupIds {
     AwsEc2SecurityGroup(AwsEc2SecurityGroup),
     Node(Node),
 }

@@ -1,4 +1,4 @@
-package schematic
+package cfn
 
 import (
 	"errors"

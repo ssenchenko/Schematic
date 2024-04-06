@@ -1,13 +1,13 @@
 #[derive(Serialize)]
-pub struct {{ .Source.RustResourceName }}Relationships {
-    id: String,
-    type_name: String,
-    properties: String,
+pub struct {{ .Source.RustResourceName }}Relationships<'a> {
+    id: &'a String,
+    type_name: &'a String,
+    properties: &'a String,
 }
 
 impl {{ .Source.RustResourceName }} {
     pub async fn relationships(&self) -> {{ .Source.RustResourceName }}Relationships {
-        {{ .Source.RustResourceName }}Relationships { 
+        {{ .Source.RustResourceName }}Relationships {
             id: &self.id,
             type_name: &self.type_name,
             properties: &self.all_properties,
@@ -15,22 +15,21 @@ impl {{ .Source.RustResourceName }} {
     }
 }
 
-{{- range .Relationships }}
-    {{- with .(*TargetUnion) }}
-        {{- template "union_enum.go.tmpl" .(*TargetUnion) }}
-    {{- end }}
-{{- end }}
-
+{{ range .Relationships }}
+    {{- with .TargetUnion }}
+        {{- template "union_enum.go.tmpl" (DerefResourceUnion .) }}
+    {{- end -}}
+{{ end }}
 #[Object(rename_fields = "PascalCase")]
 impl {{ .Source.RustResourceName }}Relationships<'_> {
     {{- range .Relationships }}
-    pub async fn {{ .SourceProperty.RustPropertyName }}(&self, ctx: &Context<'_>) -> {{ .RustReturnType }} {
+    pub async fn {{ .RustSourcePropertyName }}(&self, ctx: &Context<'_>) -> {{ .RustReturnType }} {
         let atx_context = ctx.data::<AtsContext>()?;
         get_related_resource::<{{ .RustGenericType }}>(
             &atx_context,
             &self.id,
             &self.type_name,
-            &self.properties, 
+            &self.properties,
         ).await?
     }
     {{- end }}

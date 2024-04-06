@@ -10,4 +10,5 @@ pub enum Resource {
     {{- range . }}
     {{ .RustResourceName }}({{ .RustResourceName }}),
     {{- end }}
+    Node(Node),
 }
