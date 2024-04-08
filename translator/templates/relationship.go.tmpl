@@ -1,13 +1,14 @@
+{{ if .Relationships }}
 #[derive(Serialize)]
-pub struct {{ .Source.RustResourceName }}Relationships<'a> {
+pub struct {{ .RustResourceName }}Relationships<'a> {
     id: &'a String,
     type_name: &'a String,
     properties: &'a String,
 }
 
-impl {{ .Source.RustResourceName }} {
-    pub async fn relationships(&self) -> {{ .Source.RustResourceName }}Relationships {
-        {{ .Source.RustResourceName }}Relationships {
+impl {{ .RustResourceName }} {
+    pub async fn relationships(&self) -> {{ .RustResourceName }}Relationships {
+        {{ .RustResourceName }}Relationships {
             id: &self.id,
             type_name: &self.type_name,
             properties: &self.all_properties,
@@ -21,7 +22,7 @@ impl {{ .Source.RustResourceName }} {
     {{- end -}}
 {{ end }}
 #[Object(rename_fields = "PascalCase")]
-impl {{ .Source.RustResourceName }}Relationships<'_> {
+impl {{ .RustResourceName }}Relationships<'_> {
     {{- range .Relationships }}
     pub async fn {{ .RustSourcePropertyName }}(&self, ctx: &Context<'_>) -> {{ .RustReturnType }} {
         let atx_context = ctx.data::<AtsContext>()?;
@@ -34,3 +35,4 @@ impl {{ .Source.RustResourceName }}Relationships<'_> {
     }
     {{- end }}
 }
+{{ end }}

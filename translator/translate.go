@@ -18,10 +18,7 @@ type Resource struct {
 
 type AllRelationships map[string]Resource
 
-type RustModel struct {
-	Resources []ResourceType
-	Connections []ResourceConnections
-}
+type RustModel []ResourceType
 
 type ResourceType struct {
 	CfnResourceName     string
@@ -29,6 +26,7 @@ type ResourceType struct {
 	GraphQlResourceName string
 	UseComplex          string
 	Properties          []ResourceProperty
+	Relationships       []ResourceRelationship
 }
 
 type ResourceProperty struct {
@@ -36,27 +34,22 @@ type ResourceProperty struct {
 	RustPropertyType string
 }
 
-type ResourceConnections struct {
-	Source ResourceType
-	Relationships []ResourceRelationship
-}
-
 type ResourceRelationship struct {
 	RustSourcePropertyName string
-	RustReturnType string
-	RustGenericType string
-	TargetUnion *ResourceUnion
+	RustReturnType         string
+	RustGenericType        string
+	TargetUnion            *ResourceUnion
 }
 
 type ResourceUnion struct {
 	RustUnionName string
-	Resources []ResourceType
+	Resources     []ResourceType
 }
 
 func (allRelationships *AllRelationships) ApplyOverrides(overrides map[string]map[string]string) {
 	for resourceName, overrides := range overrides {
 		for oldName, newName := range overrides {
-			for _, relationship := range(*allRelationships)[resourceName].Relationships {
+			for _, relationship := range (*allRelationships)[resourceName].Relationships {
 				relationship[newName] = relationship[oldName]
 				delete(relationship, oldName)
 			}
@@ -64,7 +57,7 @@ func (allRelationships *AllRelationships) ApplyOverrides(overrides map[string]ma
 	}
 }
 
-// helper to deref possibly nil pointers in template
+// Helper to deref possibly nil pointers in template
 func Deref[T any](pointer *T) T {
 	if pointer == nil {
 		var zero T

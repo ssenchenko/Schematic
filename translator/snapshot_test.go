@@ -23,6 +23,7 @@ func TestSnapshotResourceStruct(t *testing.T) {
 				RustPropertyType: "String",
 			},
 		},
+		Relationships: nil,
 	}
 
 	runSnapshotTest(t, snapshotFileName, testData, templateFileName)
@@ -38,6 +39,7 @@ func TestSnapshotResourceEnum(t *testing.T) {
 			GraphQlResourceName: "Aws_CloudWatch_Alarm",
 			UseComplex:          "",
 			Properties:          nil,
+			Relationships:       nil,
 		},
 		{
 			CfnResourceName:     "AWS::EC2::Instance",
@@ -45,6 +47,7 @@ func TestSnapshotResourceEnum(t *testing.T) {
 			GraphQlResourceName: "Aws_Ec2_Instance",
 			UseComplex:          "",
 			Properties:          nil,
+			Relationships:       nil,
 		},
 	}
 
@@ -63,6 +66,7 @@ func TestSnapshotResourceUnion(t *testing.T) {
 				GraphQlResourceName: "AwsEc2SecurityGroup",
 				UseComplex:          ", complex",
 				Properties:          nil,
+				Relationships:       nil,
 			},
 			{
 				CfnResourceName:     "AWS::EC2::Subnet",
@@ -70,6 +74,7 @@ func TestSnapshotResourceUnion(t *testing.T) {
 				GraphQlResourceName: "Node",
 				UseComplex:          "",
 				Properties:          nil,
+				Relationships:       nil,
 			},
 		},
 	}
@@ -80,14 +85,12 @@ func TestSnapshotResourceUnion(t *testing.T) {
 func TestSnapshotRelationship(t *testing.T) {
 	templateFileName := "relationship.go.tmpl"
 	snapshotFileName := "relationship.rs.snap"
-	testData := ResourceConnections{
-		Source: ResourceType{
-			CfnResourceName:     "AWS::EC2::SecurityGroup",
-			RustResourceName:    "AwsEc2SecurityGroup",
-			GraphQlResourceName: "AwsEc2SecurityGroup",
-			UseComplex:          "",
-			Properties:          nil,
-		},
+	testData := ResourceType{
+		CfnResourceName:     "AWS::EC2::SecurityGroup",
+		RustResourceName:    "AwsEc2SecurityGroup",
+		GraphQlResourceName: "AwsEc2SecurityGroup",
+		UseComplex:          "",
+		Properties:          nil,
 		Relationships: []ResourceRelationship{
 			{
 				RustSourcePropertyName: "security_group_ingress_source_security_group_name",
@@ -129,109 +132,88 @@ func TestSnapshotAll(t *testing.T) {
 	templateFileName := "all.go.tmpl"
 	snapshotFileName := "all.rs.snap"
 	testData := RustModel{
-		Resources: []ResourceType{
-			{
-				CfnResourceName:     "AWS::CloudWatch::Alarm",
-				RustResourceName:    "AwsCloudWatchAlarm",
-				GraphQlResourceName: "Aws_CloudWatch_Alarm",
-				UseComplex:          ", complex",
-				Properties: []ResourceProperty{
-					{
-						RustPropertyName: "id",
-						RustPropertyType: "String",
-					},
-					{
-						RustPropertyName: "all_properties",
-						RustPropertyType: "String",
-					},
+		{
+			CfnResourceName:     "AWS::CloudWatch::Alarm",
+			RustResourceName:    "AwsCloudWatchAlarm",
+			GraphQlResourceName: "Aws_CloudWatch_Alarm",
+			UseComplex:          ", complex",
+			Properties: []ResourceProperty{
+				{
+					RustPropertyName: "id",
+					RustPropertyType: "String",
+				},
+				{
+					RustPropertyName: "all_properties",
+					RustPropertyType: "String",
 				},
 			},
-			{
-				CfnResourceName:     "AWS::EC2::Instance",
-				RustResourceName:    "AwsEc2Instance",
-				GraphQlResourceName: "Aws_Ec2_Instance",
-				UseComplex:          ", complex",
-				Properties: []ResourceProperty{
-					{
-						RustPropertyName: "id",
-						RustPropertyType: "String",
+			Relationships: []ResourceRelationship{
+				{
+					RustSourcePropertyName: "dimensions_value",
+					RustReturnType:         "Vec<AwsCloudWatchAlarmConnections_DimensionsValue>",
+					RustGenericType:        "Vec<AwsCloudWatchAlarmConnections_DimensionsValue>",
+					TargetUnion: &ResourceUnion{
+						RustUnionName: "AwsCloudWatchAlarmConnections_DimensionsValue",
+						Resources: []ResourceType{
+							{
+								CfnResourceName:     "AWS::EC2::Instance",
+								RustResourceName:    "AwsEc2Instance",
+								GraphQlResourceName: "Aws_Ec2_Instance",
+								UseComplex:          "",
+								Properties:          nil,
+							},
+							{
+								CfnResourceName:     "AWS::S3::Bucket",
+								RustResourceName:    "AwsS3Bucket",
+								GraphQlResourceName: "Aws_S3_Bucket",
+								UseComplex:          "",
+								Properties:          nil,
+							},
+						},
 					},
-					{
-						RustPropertyName: "all_properties",
-						RustPropertyType: "String",
+				},
+				{
+					RustSourcePropertyName: "metrics_metric_stat_metric_dimensions_value",
+					RustReturnType:         "Vec<AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue>",
+					RustGenericType:        "Vec<AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue>",
+					TargetUnion: &ResourceUnion{
+						RustUnionName: "AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue",
+						Resources: []ResourceType{
+							{
+								CfnResourceName:     "AWS::EC2::Instance",
+								RustResourceName:    "AwsEc2Instance",
+								GraphQlResourceName: "Aws_Ec2_Instance",
+								UseComplex:          "",
+								Properties:          nil,
+							},
+							{
+								CfnResourceName:     "AWS::S3::Bucket",
+								RustResourceName:    "AwsS3Bucket",
+								GraphQlResourceName: "Aws_S3_Bucket",
+								UseComplex:          "",
+								Properties:          nil,
+							},
+						},
 					},
 				},
 			},
 		},
-		Connections: []ResourceConnections{
-			{
-				Source: ResourceType{
-					CfnResourceName:     "AWS::CloudWatch::Alarm",
-					RustResourceName:    "AwsCloudWatchAlarm",
-					GraphQlResourceName: "Aws_CloudWatch_Alarm",
-					UseComplex:          ", complex",
-					Properties: []ResourceProperty{
-						{
-							RustPropertyName: "id",
-							RustPropertyType: "String",
-						},
-						{
-							RustPropertyName: "all_properties",
-							RustPropertyType: "String",
-						},
-					},
+		{
+			CfnResourceName:     "AWS::EC2::Instance",
+			RustResourceName:    "AwsEc2Instance",
+			GraphQlResourceName: "Aws_Ec2_Instance",
+			UseComplex:          ", complex",
+			Properties: []ResourceProperty{
+				{
+					RustPropertyName: "id",
+					RustPropertyType: "String",
 				},
-				Relationships: []ResourceRelationship{
-					{
-						RustSourcePropertyName: "dimensions_value",
-						RustReturnType:         "Vec<AwsCloudWatchAlarmConnections_DimensionsValue>",
-						RustGenericType:        "Vec<AwsCloudWatchAlarmConnections_DimensionsValue>",
-						TargetUnion: &ResourceUnion{
-							RustUnionName: "AwsCloudWatchAlarmConnections_DimensionsValue",
-							Resources: []ResourceType{
-								{
-									CfnResourceName:     "AWS::EC2::Instance",
-									RustResourceName:    "AwsEc2Instance",
-									GraphQlResourceName: "Aws_Ec2_Instance",
-									UseComplex:          "",
-									Properties:          nil,
-								},
-								{
-									CfnResourceName:     "AWS::S3::Bucket",
-									RustResourceName:    "AwsS3Bucket",
-									GraphQlResourceName: "Aws_S3_Bucket",
-									UseComplex:          "",
-									Properties:          nil,
-								},
-							},
-						},
-					},
-					{
-						RustSourcePropertyName: "metrics_metric_stat_metric_dimensions_value",
-						RustReturnType:         "Vec<AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue>",
-						RustGenericType:        "Vec<AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue>",
-						TargetUnion: &ResourceUnion{
-							RustUnionName: "AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue",
-							Resources: []ResourceType{
-								{
-									CfnResourceName:     "AWS::EC2::Instance",
-									RustResourceName:    "AwsEc2Instance",
-									GraphQlResourceName: "Aws_Ec2_Instance",
-									UseComplex:          "",
-									Properties:          nil,
-								},
-								{
-									CfnResourceName:     "AWS::S3::Bucket",
-									RustResourceName:    "AwsS3Bucket",
-									GraphQlResourceName: "Aws_S3_Bucket",
-									UseComplex:          "",
-									Properties:          nil,
-								},
-							},
-						},
-					},
+				{
+					RustPropertyName: "all_properties",
+					RustPropertyType: "String",
 				},
 			},
+			Relationships: nil,
 		},
 	}
 
@@ -258,11 +240,13 @@ func runSnapshotTest[TestData any](
 	if err != nil {
 		t.Errorf("cannot load snapshot %s %v", snapshotFileName, err)
 	}
+	expected = strings.TrimSpace(expected)
 
 	actual, err := hydrate(testData, templateNames...)
+	actual = strings.TrimSpace(actual)
 	if err != nil {
 		t.Errorf("For %s, expected no error but got\n%v", templateNames[0], err)
-	} else if strings.TrimSpace(expected) != strings.TrimSpace(actual) {
+	} else if expected != actual {
 		t.Errorf("For %s, expected %s, but got\n%v", templateNames[0], snapshotFileName, actual)
 	}
 }

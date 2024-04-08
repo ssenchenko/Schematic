@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	// A flag to indicate that only resources in IA_SCOPE_RESOURCES should be processed
 	IA_SCOPE_ONLY = true
 )
 
@@ -28,6 +29,7 @@ var (
 	}
 
 	// some property names seems to be wrong in relationship schema file
+	// and has to be overridden
 	ALL_RELATIONSHIPS_OVERRIDES = map[string]map[string]string{
 		"AWS::EC2::Instance": {"VolumeAttachments": "Volumes"},
 	}

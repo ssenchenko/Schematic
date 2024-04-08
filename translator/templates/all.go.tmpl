@@ -4,10 +4,10 @@
 use async_graphql::{Context, Enum, Error, Interface, OutputType, SimpleObject, Result, Object, ComplexObject, Union};
 use serde::Serialize;
 
-{{ range .Resources }}
+{{ range . }}
     {{- template "resource_struct.go.tmpl" . }}
 {{ end }}
-{{ with .Resources }}
+{{ with . }}
     {{- template "interface_enum.go.tmpl" . }}
 {{- end }}
 #[derive(SimpleObject, Serialize, Clone)]
@@ -39,7 +39,6 @@ pub struct Topology {
 }
 
 // =========== Relationships ===========
-
-{{ range .Connections }}
+{{ range . }}
     {{- template "relationship.go.tmpl" . }}
 {{- end }}
