@@ -1,5 +1,7 @@
 package translator
 
+import "ssenchenko/schematic/tools"
+
 const (
 	TEMPLATE_DIR string = "./templates"
 )
@@ -24,7 +26,6 @@ type ResourceType struct {
 	CfnResourceName     string
 	RustResourceName    string
 	GraphQlResourceName string
-	UseComplex          string
 	Properties          []ResourceProperty
 	Relationships       []ResourceRelationship
 }
@@ -55,6 +56,61 @@ func (allRelationships *AllRelationships) ApplyOverrides(overrides map[string]ma
 			}
 		}
 	}
+}
+
+func translate(allRelationships AllRelationships, filter map[string]bool) (RustModel, []error) {
+	errors := make([]error, 0)
+	rustModel := make(RustModel, 0, len(allRelationships))
+
+	for resourceName, resource := range allRelationships {
+		if _, ok := filter[resourceName]; !ok {
+			continue
+		}
+
+		awsResourceName, err := tools.NewAwsResourceName(resourceName)
+		if err != nil {
+			errors = append(errors, err)
+			continue
+		}
+
+		properties := []ResourceProperty{
+			{
+				RustPropertyName: "id",
+				RustPropertyType: "String",
+			},
+			{
+				RustPropertyName: "all_properties",
+				RustPropertyType: "String",
+			},
+		}
+
+		relationships := []ResourceRelationship{}
+		for _, relationship := range resource.Relationships {
+			for relationshipName, references := range relationship {
+				
+				for _, reference := range references {
+					rustPropertyName := PascalCaseToSnakeCase(reference.Attribute)
+					rustPropertyType := MixedPascalToPascalCase(reference.TypeName)
+					relationships = append(relationships, ResourceRelationship{
+						RustSourcePropertyName: rustPropertyName,
+						RustReturnType:         rustPropertyType,
+						RustGenericType:        "",
+						TargetUnion:            nil,
+					})
+				}
+			}
+		}
+
+		rustModel = append(rustModel, ResourceType{
+			CfnResourceName:     awsResourceName.AsCfn(),
+			RustResourceName:    awsResourceName.AsRust(),
+			GraphQlResourceName: awsResourceName.AsGraphQl(),
+			Properties:          properties,
+			Relationships:       relationships,
+		})
+	}
+
+	return rustModel, errors
 }
 
 // Helper to deref possibly nil pointers in template
