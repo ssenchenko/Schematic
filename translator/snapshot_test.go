@@ -172,14 +172,12 @@ func TestSnapshotAll(t *testing.T) {
 								CfnResourceName:     "AWS::EC2::Instance",
 								RustResourceName:    "AwsEc2Instance",
 								GraphQlResourceName: "Aws_Ec2_Instance",
-								UseComplex:          "",
 								Properties:          nil,
 							},
 							{
 								CfnResourceName:     "AWS::S3::Bucket",
 								RustResourceName:    "AwsS3Bucket",
 								GraphQlResourceName: "Aws_S3_Bucket",
-								UseComplex:          "",
 								Properties:          nil,
 							},
 						},
@@ -191,7 +189,6 @@ func TestSnapshotAll(t *testing.T) {
 			CfnResourceName:     "AWS::EC2::Instance",
 			RustResourceName:    "AwsEc2Instance",
 			GraphQlResourceName: "Aws_Ec2_Instance",
-			UseComplex:          ", complex",
 			Properties: []ResourceProperty{
 				{
 					RustPropertyName: "id",
