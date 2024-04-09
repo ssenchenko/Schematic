@@ -1,5 +1,5 @@
 #[derive(SimpleObject, Serialize)]
-#[graphql(name = "{{ .GraphQlResourceName }}", rename_fields = "PascalCase"{{ .UseComplex }})]
+#[graphql(name = "{{ .GraphQlResourceName }}", rename_fields = "PascalCase", complex)]
 pub struct {{ .RustResourceName }} {
     {{- range .Properties }}
     pub {{ .RustPropertyName }}: {{ .RustPropertyType }},

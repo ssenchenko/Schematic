@@ -12,7 +12,6 @@ func TestSnapshotResourceStruct(t *testing.T) {
 		CfnResourceName:     "AWS::S3::Bucket",
 		RustResourceName:    "AwsS3Bucket",
 		GraphQlResourceName: "Aws_S3_Bucket",
-		UseComplex:          ", complex",
 		Properties: []ResourceProperty{
 			{
 				RustPropertyName: "id",
@@ -37,7 +36,6 @@ func TestSnapshotResourceEnum(t *testing.T) {
 			CfnResourceName:     "AWS::CloudWatch::Alarm",
 			RustResourceName:    "AwsCloudWatchAlarm",
 			GraphQlResourceName: "Aws_CloudWatch_Alarm",
-			UseComplex:          "",
 			Properties:          nil,
 			Relationships:       nil,
 		},
@@ -45,7 +43,6 @@ func TestSnapshotResourceEnum(t *testing.T) {
 			CfnResourceName:     "AWS::EC2::Instance",
 			RustResourceName:    "AwsEc2Instance",
 			GraphQlResourceName: "Aws_Ec2_Instance",
-			UseComplex:          "",
 			Properties:          nil,
 			Relationships:       nil,
 		},
@@ -64,7 +61,6 @@ func TestSnapshotResourceUnion(t *testing.T) {
 				CfnResourceName:     "AWS::EC2::SecurityGroup",
 				RustResourceName:    "AwsEc2SecurityGroup",
 				GraphQlResourceName: "AwsEc2SecurityGroup",
-				UseComplex:          ", complex",
 				Properties:          nil,
 				Relationships:       nil,
 			},
@@ -72,7 +68,6 @@ func TestSnapshotResourceUnion(t *testing.T) {
 				CfnResourceName:     "AWS::EC2::Subnet",
 				RustResourceName:    "Node",
 				GraphQlResourceName: "Node",
-				UseComplex:          "",
 				Properties:          nil,
 				Relationships:       nil,
 			},
@@ -89,7 +84,6 @@ func TestSnapshotRelationship(t *testing.T) {
 		CfnResourceName:     "AWS::EC2::SecurityGroup",
 		RustResourceName:    "AwsEc2SecurityGroup",
 		GraphQlResourceName: "AwsEc2SecurityGroup",
-		UseComplex:          "",
 		Properties:          nil,
 		Relationships: []ResourceRelationship{
 			{
@@ -109,14 +103,12 @@ func TestSnapshotRelationship(t *testing.T) {
 							CfnResourceName:     "AWS::EC2::SecurityGroup",
 							RustResourceName:    "AwsEc2SecurityGroup",
 							GraphQlResourceName: "AwsEc2SecurityGroup",
-							UseComplex:          ", complex",
 							Properties:          nil,
 						},
 						{
 							CfnResourceName:     "AWS::EC2::Subnet",
 							RustResourceName:    "Node",
 							GraphQlResourceName: "Node",
-							UseComplex:          "",
 							Properties:          nil,
 						},
 					},
@@ -136,7 +128,6 @@ func TestSnapshotAll(t *testing.T) {
 			CfnResourceName:     "AWS::CloudWatch::Alarm",
 			RustResourceName:    "AwsCloudWatchAlarm",
 			GraphQlResourceName: "Aws_CloudWatch_Alarm",
-			UseComplex:          ", complex",
 			Properties: []ResourceProperty{
 				{
 					RustPropertyName: "id",
@@ -159,14 +150,12 @@ func TestSnapshotAll(t *testing.T) {
 								CfnResourceName:     "AWS::EC2::Instance",
 								RustResourceName:    "AwsEc2Instance",
 								GraphQlResourceName: "Aws_Ec2_Instance",
-								UseComplex:          "",
 								Properties:          nil,
 							},
 							{
 								CfnResourceName:     "AWS::S3::Bucket",
 								RustResourceName:    "AwsS3Bucket",
 								GraphQlResourceName: "Aws_S3_Bucket",
-								UseComplex:          "",
 								Properties:          nil,
 							},
 						},
