@@ -1,34 +1,29 @@
 #[derive(Serialize)]
 pub struct AwsEc2SecurityGroupRelationships<'a> {
-    id: &'a String,
-    type_name: &'a String,
     properties: &'a String,
 }
 
 impl AwsEc2SecurityGroup {
     pub async fn relationships(&self) -> AwsEc2SecurityGroupRelationships {
         AwsEc2SecurityGroupRelationships {
-            id: &self.id,
-            type_name: &self.type_name,
             properties: &self.all_properties,
         }
     }
 }
 
-#[derive(Union, Serialize)]
-pub enum AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId {
-    AwsEc2SecurityGroup(AwsEc2SecurityGroup),
-    Node(Node),
-}
+// <AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId> Mock
 
-#[Object(rename_fields = "PascalCase")]
+#[Object(
+    name = "Aws_Ec2_SecurityGroup_Relationships",
+    rename_fields = "camelCase"
+)]
 impl AwsEc2SecurityGroupRelationships<'_> {
     pub async fn security_group_ingress_source_security_group_name(&self, ctx: &Context<'_>) -> Vec<AwsEc2SecurityGroup> {
         let atx_context = ctx.data::<AtsContext>()?;
         get_related_resource::<Vec<AwsEc2SecurityGroup>>(
             &atx_context,
-            &self.id,
-            &self.type_name,
+            &self.identifier,
+            &self.resource_type,
             &self.properties,
         ).await?
     }
@@ -36,8 +31,8 @@ impl AwsEc2SecurityGroupRelationships<'_> {
         let atx_context = ctx.data::<AtsContext>()?;
         get_related_resource::<Vec<AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId>>(
             &atx_context,
-            &self.id,
-            &self.type_name,
+            &self.identifier,
+            &self.resource_type,
             &self.properties,
         ).await?
     }

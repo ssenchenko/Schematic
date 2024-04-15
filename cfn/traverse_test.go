@@ -2,7 +2,6 @@ package cfn
 
 import (
 	"errors"
-	"fmt"
 	"reflect"
 	"testing"
 )
@@ -213,7 +212,7 @@ func TestResolveRef(t *testing.T) {
 		{
 			ref:           "#/definitions/invalidType",
 			expectedTypes: nil,
-			expectedError: fmt.Errorf("no type found for invalidType in %s", schema[DEFINITIONS].(Dict)),
+			expectedError: errors.New("no type found for invalidType"),
 		},
 	}
 
@@ -231,6 +230,7 @@ func TestResolveRef(t *testing.T) {
 }
 
 func TestResolveAnyOneOf(t *testing.T) {
+
 	testCases := []struct {
 		fragment      []Dict
 		expectedTypes []Dict
@@ -459,7 +459,7 @@ func TestFollowPath(t *testing.T) {
 		{
 			path:        "ShouldNotHappen/Unexpected",
 			expected:    nil,
-			expectedErr: fmt.Errorf("error in path ShouldNotHappen/Unexpected no idea how to handle %s", schema[PROPS].(Dict)["ShouldNotHappen"]),
+			expectedErr: errors.New("no idea how to handle properties[ShouldNotHappen]"),
 		},
 	}
 
@@ -500,18 +500,17 @@ func TestIsArray(t *testing.T) {
 		{
 			path:        "NotDefined",
 			expected:    false,
-			expectedErr: fmt.Errorf(
-				"what should I do with it? %s in %s has branches; some of them end with array and some - don't", "NotDefined", "AWS::Test::Test"),
+			expectedErr: errors.New("pathToProperty: NotDefined, typeName: AWS::Test::Test, has branches; some of them end with array and some - don't"),
 		},
 		{
 			path:        "NonexistantProperty",
 			expected:    false,
-			expectedErr: fmt.Errorf("no type found for %s in %s", "NonexistantProperty", "AWS::Test::Test"),
+			expectedErr: errors.New("pathToProperty: NonexistantProperty, typeName: AWS::Test::Test, no type found"),
 		},
 		{
 			path:        "ShouldNotHappen/Unexpected",
 			expected:    false,
-			expectedErr: fmt.Errorf("error in path ShouldNotHappen/Unexpected no idea how to handle %s", schema[PROPS].(Dict)["ShouldNotHappen"]),
+			expectedErr: errors.New("pathToProperty: ShouldNotHappen/Unexpected, typeName: AWS::Test::Test, no idea how to handle properties[ShouldNotHappen]"),
 		},
 	}
 

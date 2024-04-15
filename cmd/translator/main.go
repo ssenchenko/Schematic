@@ -1,21 +1,21 @@
 package main
 
 import (
-	"encoding/json"
+	"log"
 	"os"
-	"path/filepath"
 
-	"ssenchenko/schematic/cfn"
 	"ssenchenko/schematic/translator"
 )
 
 const (
-	// A flag to indicate that only resources in IA_SCOPE_RESOURCES should be processed
-	IA_SCOPE_ONLY = true
+	// IaScopeOnly flag indicates that only resources in IaScopeResources should be processed
+	IaScopeOnly = true
 )
 
 var (
-	IA_SCOPE_RESOURCES = map[string]bool{
+	// IaScopeResources contains list of resources for IA
+	// it's a map (set) to void adding the same resource twice by mistake
+	IaScopeResources = map[string]bool{
 		"AWS::EC2::Instance":         true,
 		"AWS::EC2::VolumeAttachment": true,
 		"AWS::EC2::Volume":           true,
@@ -28,9 +28,9 @@ var (
 		"AWS::S3::Bucket":            true,
 	}
 
-	// some property names seems to be wrong in relationship schema file
-	// and has to be overridden
-	ALL_RELATIONSHIPS_OVERRIDES = map[string]map[string]string{
+	// AllRelationshipsOverrides allows to override names in relationship file.
+	// Some property names seems to be wrong and has to be overridden.
+	AllRelationshipsOverrides = map[string]map[string]string{
 		"AWS::EC2::Instance": {"VolumeAttachments": "Volumes"},
 	}
 )
@@ -40,41 +40,34 @@ func main() {
 	if len(os.Args) > 1 {
 		relationshipsFile = os.Args[1]
 	}
-	relationshipsFile = GetFullPath(relationshipsFile)
-	content := Must(os.ReadFile(relationshipsFile))
-
-	var allRelationships translator.AllRelationships
-	err := json.Unmarshal(content, &allRelationships)
-	if err != nil {
-		panic(err)
-	}
-	allRelationships.ApplyOverrides(ALL_RELATIONSHIPS_OVERRIDES)
+	allRelationships := Must(translator.LoadAllRelationships(relationshipsFile))
+	allRelationships.ApplyOverrides(AllRelationshipsOverrides)
 
 	cfnSchemaDir := "data/cfn"
 	if len(os.Args) > 2 {
 		cfnSchemaDir = os.Args[2]
 	}
-	cfnSchemaDir = GetFullPath(cfnSchemaDir)
-	cfnFiles := Must(os.ReadDir(cfnSchemaDir))
-	cfnJsonSchema := make(cfn.Dict)
-	cfnSchemaCombined := make(map[string]cfn.Dict)
-	for _, file := range cfnFiles {
-		content = Must(os.ReadFile(GetFullPath(file.Name())))
-		err := json.Unmarshal(content, &cfnJsonSchema)
-		if err != nil {
-			panic(err)
-		}
-		cfnSchemaCombined[cfnJsonSchema["typeName"].(string)] = cfnJsonSchema
+	cfnSchemaCombined := Must(translator.LoadCfnSchemaCombined(cfnSchemaDir, nil))
+	var filter map[string]bool
+	if IaScopeOnly {
+		filter = IaScopeResources
+	} else {
+		filter = make(map[string]bool)
 	}
-}
+	rustModel, errors := translator.Translate(allRelationships, cfnSchemaCombined, filter)
 
-// Transform relative path to an absolute one using current working directory as a base
-func GetFullPath(path string) string {
-	if !filepath.IsAbs(path) {
-		wd := Must(os.Getwd())
-		return filepath.Join(wd, path)
+	if len(errors) > 0 {
+		log.Println("Translation Errors:")
+		for _, err := range errors {
+			log.Println(" >>", err.Error())
+		}
 	}
-	return path
+
+	bytes := Must(translator.HydrateTemplates(rustModel))
+	err := os.WriteFile("configuration/model.rs", bytes.Bytes(), 0644)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func Must[T any](v T, err error) T {

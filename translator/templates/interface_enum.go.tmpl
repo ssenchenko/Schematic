@@ -1,14 +1,14 @@
 #[derive(Interface, Serialize)]
 #[graphql(
-    name = "Resource",
-    rename_fields = "PascalCase",
-    field(name = "id", ty = "String"),
-    field(name = "type_name", ty = "String"),
-    field(name = "all_properties", ty = "String"),
+    name = "AWS_Resource_Interface",
+    rename_fields = "camelCase",
+    field(name = "type", ty = "String"),
+    field(name = "resource_type", ty = "String"),
+    field(name = "identifier", ty = "String"),
+    field(name = "all_properties", ty = "String")
 )]
 pub enum Resource {
     {{- range . }}
     {{ .RustResourceName }}({{ .RustResourceName }}),
     {{- end }}
-    Node(Node),
 }

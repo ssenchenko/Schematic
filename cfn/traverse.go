@@ -1,9 +1,8 @@
 package cfn
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"slices"
 	"strings"
 )
@@ -38,15 +37,15 @@ const (
 	OBJECTB
 )
 
-type Dict map[string]any
+type Dict = map[string]any
 
 func IsArray(pathToProperty string, typeNameCfnFormat string, schema map[string]Dict) (bool, error) {
 	types, err := FollowPath(pathToProperty, schema[typeNameCfnFormat])
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("pathToProperty: %s, typeName: %s, %v", pathToProperty, typeNameCfnFormat, err)
 	}
 	if len(types) == 0 {
-		return false, fmt.Errorf("no type found for %s in %s", pathToProperty, typeNameCfnFormat)
+		return false, fmt.Errorf("pathToProperty: %s, typeName: %s, no type found", pathToProperty, typeNameCfnFormat)
 	}
 	arrayTest := make([]bool, len(types))
 	counter := 0
@@ -61,7 +60,7 @@ func IsArray(pathToProperty string, typeNameCfnFormat string, schema map[string]
 	}
 	if !allAreSame {
 		return false, fmt.Errorf(
-			"what should I do with it? %s in %s has branches; some of them end with array and some - don't", pathToProperty, typeNameCfnFormat)
+			"pathToProperty: %s, typeName: %s, has branches; some of them end with array and some - don't", pathToProperty, typeNameCfnFormat)
 	}
 	return arrayTest[0], nil
 }
@@ -76,20 +75,20 @@ func FollowPath(path string, schema Dict) (map[TypeBits]bool, error) {
 	}
 	stack := make([]StackNode, 1, 5) // its capacity is hard to predict, but it's better than 0 or 1
 	stack[0] = StackNode{propertyNumberInPath: propertyNumberInPath, fragment: schema, type_: OBJECTB}
-	types_seen := make(map[TypeBits]bool)
+	typesSeen := make(map[TypeBits]bool)
 	for len(stack) > 0 {
 		node := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		if node.propertyNumberInPath == len(propertyNames) {
-			types_seen[node.type_] = true
+			typesSeen[node.type_] = true
 			continue
 		}
 		fragments, err := OneStepAtATime(propertyNames[node.propertyNumberInPath], node.fragment, schema)
 		if err != nil {
-			return nil, fmt.Errorf("error in path %s %v", path, err)
+			return nil, err
 		}
 		if len(fragments) == 0 {
-			log.Printf("step %s not found in %s", propertyNames[node.propertyNumberInPath], node.fragment)
+			// log.Printf("step %s not found in %s", propertyNames[node.propertyNumberInPath], DictToString(node.fragment))
 			continue
 		}
 		for _, fragment := range fragments {
@@ -111,16 +110,16 @@ func FollowPath(path string, schema Dict) (map[TypeBits]bool, error) {
 			case string:
 				type_, err := typeBitsFromJsonType(fragment[TYPE].(string))
 				if err != nil {
-					return nil, fmt.Errorf("error in path %s %v", path, err)
+					return nil, err
 				}
 				nodeType |= type_
 			default:
-				return nil, fmt.Errorf("error in path %s unknown type %v", path, fragment)
+				return nil, fmt.Errorf("unknown type %v", fragment[TYPE])
 			}
 			stack = append(stack, StackNode{propertyNumberInPath: node.propertyNumberInPath + 1, fragment: fragment, type_: nodeType})
 		}
 	}
-	return types_seen, nil
+	return typesSeen, nil
 }
 
 func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, error) {
@@ -137,7 +136,7 @@ func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, er
 			if anyOneOf, ok := extractAnyOneOf(nextDestination); ok {
 				return ResolveAnyOneOf(anyOneOf, schema)
 			}
-			return nil, fmt.Errorf("no idea how to handle %s", result)
+			return nil, fmt.Errorf("no idea how to handle properties[%s]", propertyName)
 		}
 		// it makes sense because of anyOf/oneOf, we might hit a branch which is not on the path
 		return make([]Dict, 0), nil
@@ -166,14 +165,14 @@ func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, er
 		// first resolve ref
 		types, err := ResolveRef(ref.(string), schema)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("property: %s, %v", propertyName, err)
 		}
 		// then keep looking for the step in the resolved type(s)
 		results := make([]Dict, 0, 1)
 		for _, t := range types {
 			res, err := OneStepAtATime(propertyName, t, schema)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("property: %s, %v", propertyName, err)
 			}
 			results = append(results, res...)
 		}
@@ -185,7 +184,7 @@ func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, er
 		// resolve to an actual type(s)
 		types, err := ResolveAnyOneOf(anyOneOf, schema)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("property: %s, %v", propertyName, err)
 		}
 		// look for our property name
 		results := make([]Dict, 0, 1)
@@ -199,7 +198,7 @@ func OneStepAtATime(propertyName string, fragment Dict, schema Dict) ([]Dict, er
 		return results, nil
 	}
 
-	return nil, fmt.Errorf("no idea how to handle %s", fragment)
+	return nil, fmt.Errorf("no idea how to handle %s", propertyName)
 }
 
 // Resolve ref and return underlying type.
@@ -209,10 +208,10 @@ func ResolveRef(ref string, schema Dict) ([]Dict, error) {
 		return nil, err
 	}
 	if _, ok := schema[DEFINITIONS]; !ok {
-		return nil, fmt.Errorf("no definitions found in the schema %s", schema)
+		return nil, errors.New("no definitions found")
 	}
 	if _, ok := schema[DEFINITIONS].(Dict)[refTypeName]; !ok {
-		return nil, fmt.Errorf("no type found for %s in %s", refTypeName, schema[DEFINITIONS].(Dict))
+		return nil, fmt.Errorf("no type found for %s", refTypeName)
 	}
 
 	nextDestination := schema[DEFINITIONS].(Dict)[refTypeName].(Dict)
@@ -225,7 +224,7 @@ func ResolveRef(ref string, schema Dict) ([]Dict, error) {
 	if anyOneOf, ok := extractAnyOneOf(nextDestination); ok {
 		return ResolveAnyOneOf(anyOneOf, schema)
 	}
-	return nil, fmt.Errorf("no idea how to handle %s", nextDestination)
+	return nil, fmt.Errorf("no idea how to handle definitions[%s]", refTypeName)
 }
 
 // Resolve anyOf and oneOf keys.
@@ -238,17 +237,17 @@ func ResolveAnyOneOf(anyOneOf []Dict, schema Dict) ([]Dict, error) {
 		} else if refString, ok := branch[REF]; ok {
 			resolvedRef, err := ResolveRef(refString.(string), schema)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("any/oneOf has $ref %s, %v", refString, err)
 			}
 			resolved = append(resolved, resolvedRef...)
 		} else if nestedAnyOne, ok := extractAnyOneOf(branch); ok {
 			resolvedAnyOf, err := ResolveAnyOneOf(nestedAnyOne, schema)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("any/oneOf has nested any/oneOf, %v", err)
 			}
 			resolved = append(resolved, resolvedAnyOf...)
 		} else {
-			return nil, fmt.Errorf("no idea how to handle %s", branch)
+			return nil, fmt.Errorf("no idea how to handle any/oneOf branch")
 		}
 	}
 	return resolved, nil
@@ -273,21 +272,12 @@ func extractRefTypeName(ref string) (string, error) {
 	return refParts[2], nil
 }
 
-func (fragment Dict) String() string {
-	binary, err := json.Marshal(fragment)
-	if err != nil {
-		return fmt.Sprintf("damn, I can't marshal the fragment after error %v", err)
-	}
-	return string(binary)
-}
-
 // Extracts anyOf or oneOf from a fragment.
 func extractAnyOneOf(fragment Dict) ([]Dict, bool) {
-	if anyOneOf, ok := fragment[ANY_OF]; ok {
-		return anyOneOf.([]Dict), true
-	}
-	if anyOneOf, ok := fragment[ONE_OF]; ok {
-		return anyOneOf.([]Dict), true
+	for _, key := range []string{ANY_OF, ONE_OF} {
+		if anyOneOf, ok := fragment[key]; ok {
+			return anyOneOf.([]Dict), true
+		}
 	}
 	return nil, false
 }

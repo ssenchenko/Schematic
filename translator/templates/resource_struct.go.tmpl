@@ -1,14 +1,17 @@
 #[derive(SimpleObject, Serialize)]
-#[graphql(name = "{{ .GraphQlResourceName }}", rename_fields = "PascalCase", complex)]
+#[graphql(name = "{{ .GraphQlResourceName }}", rename_fields = "camelCase", complex)]
 pub struct {{ .RustResourceName }} {
     {{- range .Properties }}
     pub {{ .RustPropertyName }}: {{ .RustPropertyType }},
     {{- end }}
 }
 
-#[ComplexObject(rename_fields = "PascalCase")]
+#[ComplexObject(rename_fields = "camelCase")]
 impl {{ .RustResourceName }} {
-    pub async fn type_name(&self) -> String {
+    pub async fn r#type(&self) -> String {
+        AWS_RESOURCE_TYPE.to_string()
+    }
+    pub async fn resource_type(&self) -> String {
         "{{ .CfnResourceName }}".to_string()
     }
 }

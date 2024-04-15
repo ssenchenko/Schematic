@@ -1,0 +1,19 @@
+impl AwsResource {
+    pub fn get_resource(&self) -> AwsResourceInterface {
+        match self.resource_type.as_str() {
+            "AWS::CloudWatch::Alarm" => {
+                AwsResourceInterface::AwsCloudWatchAlarm(AwsCloudWatchAlarm {
+                    identifier: self.identifier.clone(),
+                    all_properties: self.all_properties.clone(),
+                })
+            }
+            "AWS::IAM::InstanceProfile" => {
+                AwsResourceInterface::AwsIamInstanceProfile(AwsIamInstanceProfile {
+                    identifier: self.identifier.clone(),
+                    all_properties: self.all_properties.clone(),
+                })
+            }
+            _ => AwsResourceInterface::AwsResource(self.clone()),
+        }
+    }
+}

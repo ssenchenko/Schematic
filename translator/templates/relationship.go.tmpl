@@ -1,35 +1,35 @@
 {{ if .Relationships }}
 #[derive(Serialize)]
 pub struct {{ .RustResourceName }}Relationships<'a> {
-    id: &'a String,
-    type_name: &'a String,
     properties: &'a String,
 }
 
 impl {{ .RustResourceName }} {
     pub async fn relationships(&self) -> {{ .RustResourceName }}Relationships {
         {{ .RustResourceName }}Relationships {
-            id: &self.id,
-            type_name: &self.type_name,
             properties: &self.all_properties,
         }
     }
 }
 
 {{ range .Relationships }}
-    {{- with .TargetUnion }}
-        {{- template "union_enum.go.tmpl" (DerefResourceUnion .) }}
+    {{- if not (eq .TargetUnion.RustUnionName "") }}
+        {{- template "union_enum.go.tmpl" .TargetUnion }}
     {{- end -}}
 {{ end }}
-#[Object(rename_fields = "PascalCase")]
+
+#[Object(
+    name = "{{ .GraphQlResourceName }}_Relationships",
+    rename_fields = "camelCase"
+)]
 impl {{ .RustResourceName }}Relationships<'_> {
     {{- range .Relationships }}
     pub async fn {{ .RustSourcePropertyName }}(&self, ctx: &Context<'_>) -> {{ .RustReturnType }} {
         let atx_context = ctx.data::<AtsContext>()?;
         get_related_resource::<{{ .RustGenericType }}>(
             &atx_context,
-            &self.id,
-            &self.type_name,
+            &self.identifier,
+            &self.resource_type,
             &self.properties,
         ).await?
     }

@@ -4,22 +4,50 @@
 use async_graphql::{Context, Enum, Error, Interface, OutputType, SimpleObject, Result, Object, ComplexObject, Union};
 use serde::Serialize;
 
-{{ range . }}
-    {{- template "resource_struct.go.tmpl" . }}
-{{ end }}
-{{ with . }}
-    {{- template "interface_enum.go.tmpl" . }}
-{{- end }}
-#[derive(SimpleObject, Serialize, Clone)]
-#[graphql(name = "Node", rename_fields = "PascalCase")]
-pub struct Node {
-    pub id: String,
-    pub type_name: String,
-    pub all_properties: String,
+pub const AWS_RESOURCE_TYPE: &str = "AWS::Resource";
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum Region {
+    ApSouth1,
+    CaCentral1,
+    EuCentral1,
+    UsWest1,
+    UsWest2,
+    EuNorth1,
+    EuWest3,
+    EuWest2,
+    EuWest1,
+    ApNortheast3,
+    ApNortheast2,
+    ApNortheast1,
+    SaEast1,
+    ApSoutheast1,
+    ApSoutheast2,
+    UsEast1,
+    UsEast2,
+}
+
+#[derive(InputObject)]
+#[graphql(name = "Topology_Config_Input")]
+pub struct TopologyConfigInput {
+    region: Option<Region>,
+}
+
+#[derive(InputObject)]
+#[graphql(name = "Resource_Config_Input")]
+pub struct ResourceConfigInput {
+    region: Option<Region>,
+}
+
+#[derive(InputObject)]
+#[graphql(name = "Resources_Config_Input")]
+pub struct ResourcesConfigInput {
+    region: Option<Region>,
+    pub filter: Option<String>,
 }
 
 #[derive(SimpleObject, Serialize)]
-#[graphql(name = "Edge", rename_fields = "PascalCase")]
+#[graphql(name = "Edge", rename_fields = "camelCase")]
 pub struct Edge {
     source: String,
     target: String,
@@ -32,13 +60,50 @@ pub enum Relation {
 }
 
 #[derive(SimpleObject, Serialize)]
-#[graphql(name = "Topology", rename_fields = "PascalCase")]
+#[graphql(name = "Topology", rename_fields = "camelCase")]
 pub struct Topology {
-    nodes: Vec<Node>,
-    edges: Vec<Edge>,
+    pub nodes: Vec<NodeInterface>,
+    pub edges: Vec<Edge>,
 }
 
+#[derive(SimpleObject, Serialize, Clone)]
+#[graphql(name = "AWS_Resource", rename_fields = "camelCase")]
+pub struct AWSResource {
+    pub r#type: String,
+    pub resource_type: String,
+    pub identifier: String,
+    pub all_properties: String,
+}
+
+#[derive(Interface, Serialize)]
+#[graphql(
+    name = "Node_Interface",
+    rename_fields = "camelCase",
+    field(name = "type", ty = "String"),
+    field(name = "identifier", ty = "String")
+)]
+pub enum NodeInterface {
+    Node(Node),
+    AWSResource(AWSResource),
+}
+
+#[derive(SimpleObject, Serialize)]
+#[graphql(name = "Node", rename_fields = "camelCase")]
+pub struct Node {
+    pub r#type: String,
+    pub identifier: String,
+}
+
+{{ range . }}
+    {{- template "resource_struct.go.tmpl" . }}
+{{ end }}
+{{ with . }}
+    {{- template "interface_enum.go.tmpl" . }}
+{{ end }}
+{{ with . }}
+    {{- template "aws_resource_impl.go.tmpl" . }}
+{{ end }}
 // =========== Relationships ===========
 {{ range . }}
     {{- template "relationship.go.tmpl" . }}
-{{- end }}
+{{ end }}

@@ -1,0 +1,15 @@
+impl AwsResource {
+    pub fn get_resource(&self) -> AwsResourceInterface {
+        match self.resource_type.as_str() {
+            {{- range . }}
+            "{{ .CfnResourceName }}" => {
+                AwsResourceInterface::{{ .RustResourceName }}({{ .RustResourceName }} {
+                    identifier: self.identifier.clone(),
+                    all_properties: self.all_properties.clone(),
+                })
+            }
+            {{- end }}
+            _ => AwsResourceInterface::AwsResource(self.clone()),
+        }
+    }
+}

@@ -3,6 +3,7 @@ package translator
 import (
 	"strings"
 	"testing"
+	"text/template"
 )
 
 func TestSnapshotResourceStruct(t *testing.T) {
@@ -14,7 +15,7 @@ func TestSnapshotResourceStruct(t *testing.T) {
 		GraphQlResourceName: "Aws_S3_Bucket",
 		Properties: []ResourceProperty{
 			{
-				RustPropertyName: "id",
+				RustPropertyName: "identifier",
 				RustPropertyType: "String",
 			},
 			{
@@ -25,7 +26,7 @@ func TestSnapshotResourceStruct(t *testing.T) {
 		Relationships: nil,
 	}
 
-	runSnapshotTest(t, snapshotFileName, testData, templateFileName)
+	runSnapshotTest(t, testData, snapshotFileName, templateFileName, TemplateDir, nil)
 }
 
 func TestSnapshotResourceEnum(t *testing.T) {
@@ -48,7 +49,7 @@ func TestSnapshotResourceEnum(t *testing.T) {
 		},
 	}
 
-	runSnapshotTest(t, snapshotFileName, testData, templateFileName)
+	runSnapshotTest(t, testData, snapshotFileName, templateFileName, TemplateDir, nil)
 }
 
 func TestSnapshotResourceUnion(t *testing.T) {
@@ -56,25 +57,36 @@ func TestSnapshotResourceUnion(t *testing.T) {
 	snapshotFileName := "union_enum.rs.snap"
 	testData := ResourceUnion{
 		RustUnionName: "AwsEc2InstanceConnections_SecurityGroupIds",
-		Resources: []ResourceType{
-			{
-				CfnResourceName:     "AWS::EC2::SecurityGroup",
-				RustResourceName:    "AwsEc2SecurityGroup",
-				GraphQlResourceName: "AwsEc2SecurityGroup",
-				Properties:          nil,
-				Relationships:       nil,
-			},
-			{
-				CfnResourceName:     "AWS::EC2::Subnet",
-				RustResourceName:    "Node",
-				GraphQlResourceName: "Node",
-				Properties:          nil,
-				Relationships:       nil,
-			},
+		RustResourceNames: map[string]bool{
+			"AwsEc2SecurityGroup": true,
+			"Node":                true,
 		},
 	}
 
-	runSnapshotTest(t, snapshotFileName, testData, templateFileName)
+	runSnapshotTest(t, testData, snapshotFileName, templateFileName, TemplateDir, nil)
+}
+
+func TestSnapshotAwsResourceImpl(t *testing.T) {
+	templateFileName := "aws_resource_impl.go.tmpl"
+	snapshotFileName := "aws_resource_impl.rs.snap"
+	testData := []ResourceType{
+		{
+			CfnResourceName:     "AWS::CloudWatch::Alarm",
+			RustResourceName:    "AwsCloudWatchAlarm",
+			GraphQlResourceName: "Aws_CloudWatch_Alarm",
+			Properties:          nil,
+			Relationships:       nil,
+		},
+		{
+			CfnResourceName:     "AWS::IAM::InstanceProfile",
+			RustResourceName:    "AwsIamInstanceProfile",
+			GraphQlResourceName: "Aws_Iam_InstanceProfile",
+			Properties:          nil,
+			Relationships:       nil,
+		},
+	}
+
+	runSnapshotTest(t, testData, snapshotFileName, templateFileName, TemplateDir, nil)
 }
 
 func TestSnapshotRelationship(t *testing.T) {
@@ -83,41 +95,39 @@ func TestSnapshotRelationship(t *testing.T) {
 	testData := ResourceType{
 		CfnResourceName:     "AWS::EC2::SecurityGroup",
 		RustResourceName:    "AwsEc2SecurityGroup",
-		GraphQlResourceName: "AwsEc2SecurityGroup",
+		GraphQlResourceName: "Aws_Ec2_SecurityGroup",
 		Properties:          nil,
 		Relationships: []ResourceRelationship{
 			{
 				RustSourcePropertyName: "security_group_ingress_source_security_group_name",
 				RustReturnType:         "Vec<AwsEc2SecurityGroup>",
 				RustGenericType:        "Vec<AwsEc2SecurityGroup>",
-				TargetUnion:            nil,
+				TargetUnion:            ResourceUnion{},
 			},
 			{
 				RustSourcePropertyName: "security_group_ingress_source_security_group_id",
 				RustReturnType:         "Vec<AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId>",
 				RustGenericType:        "Vec<AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId>",
-				TargetUnion: &ResourceUnion{
+				TargetUnion: ResourceUnion{
 					RustUnionName: "AwsEc2SecurityGroupConnections_SecurityGroupIngressSourceSecurityGroupId",
-					Resources: []ResourceType{
-						{
-							CfnResourceName:     "AWS::EC2::SecurityGroup",
-							RustResourceName:    "AwsEc2SecurityGroup",
-							GraphQlResourceName: "AwsEc2SecurityGroup",
-							Properties:          nil,
-						},
-						{
-							CfnResourceName:     "AWS::EC2::Subnet",
-							RustResourceName:    "Node",
-							GraphQlResourceName: "Node",
-							Properties:          nil,
-						},
+					RustResourceNames: map[string]bool{
+						"AwsEc2SecurityGroup": true,
+						"Node":                true,
 					},
 				},
 			},
 		},
 	}
 
-	runSnapshotTest(t, snapshotFileName, testData, templateFileName, "union_enum.go.tmpl")
+	runSnapshotTest(
+		t,
+		testData,
+		snapshotFileName,
+		templateFileName,
+		TemplateDir,
+		template.FuncMap{"DerefResourceUnion": Deref[ResourceUnion]},
+		`{{ define "union_enum.go.tmpl" }}// <{{ .RustUnionName }}> Mock{{ end }}`,
+	)
 }
 
 func TestSnapshotAll(t *testing.T) {
@@ -130,7 +140,7 @@ func TestSnapshotAll(t *testing.T) {
 			GraphQlResourceName: "Aws_CloudWatch_Alarm",
 			Properties: []ResourceProperty{
 				{
-					RustPropertyName: "id",
+					RustPropertyName: "identifier",
 					RustPropertyType: "String",
 				},
 				{
@@ -143,21 +153,11 @@ func TestSnapshotAll(t *testing.T) {
 					RustSourcePropertyName: "dimensions_value",
 					RustReturnType:         "Vec<AwsCloudWatchAlarmConnections_DimensionsValue>",
 					RustGenericType:        "Vec<AwsCloudWatchAlarmConnections_DimensionsValue>",
-					TargetUnion: &ResourceUnion{
+					TargetUnion: ResourceUnion{
 						RustUnionName: "AwsCloudWatchAlarmConnections_DimensionsValue",
-						Resources: []ResourceType{
-							{
-								CfnResourceName:     "AWS::EC2::Instance",
-								RustResourceName:    "AwsEc2Instance",
-								GraphQlResourceName: "Aws_Ec2_Instance",
-								Properties:          nil,
-							},
-							{
-								CfnResourceName:     "AWS::S3::Bucket",
-								RustResourceName:    "AwsS3Bucket",
-								GraphQlResourceName: "Aws_S3_Bucket",
-								Properties:          nil,
-							},
+						RustResourceNames: map[string]bool{
+							"AwsEc2Instance": true,
+							"AwsS3Bucket":    true,
 						},
 					},
 				},
@@ -165,21 +165,11 @@ func TestSnapshotAll(t *testing.T) {
 					RustSourcePropertyName: "metrics_metric_stat_metric_dimensions_value",
 					RustReturnType:         "Vec<AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue>",
 					RustGenericType:        "Vec<AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue>",
-					TargetUnion: &ResourceUnion{
+					TargetUnion: ResourceUnion{
 						RustUnionName: "AwsCloudWatchAlarmConnections_MetricsMetricStatMetricDimensionsValue",
-						Resources: []ResourceType{
-							{
-								CfnResourceName:     "AWS::EC2::Instance",
-								RustResourceName:    "AwsEc2Instance",
-								GraphQlResourceName: "Aws_Ec2_Instance",
-								Properties:          nil,
-							},
-							{
-								CfnResourceName:     "AWS::S3::Bucket",
-								RustResourceName:    "AwsS3Bucket",
-								GraphQlResourceName: "Aws_S3_Bucket",
-								Properties:          nil,
-							},
+						RustResourceNames: map[string]bool{
+							"AwsEc2Instance": true,
+							"AwsS3Bucket":    true,
 						},
 					},
 				},
@@ -191,7 +181,7 @@ func TestSnapshotAll(t *testing.T) {
 			GraphQlResourceName: "Aws_Ec2_Instance",
 			Properties: []ResourceProperty{
 				{
-					RustPropertyName: "id",
+					RustPropertyName: "identifier",
 					RustPropertyType: "String",
 				},
 				{
@@ -203,36 +193,42 @@ func TestSnapshotAll(t *testing.T) {
 		},
 	}
 
-	runSnapshotTest(t, snapshotFileName, testData,
+	runSnapshotTest(
+		t,
+		testData,
+		snapshotFileName,
 		templateFileName,
-		"interface_enum.go.tmpl",
-		"resource_struct.go.tmpl",
-		"relationship.go.tmpl",
-		"union_enum.go.tmpl",
+		TemplateDir,
+		template.FuncMap{"DerefResourceUnion": Deref[ResourceUnion]},
+		`{{ define "interface_enum.go.tmpl" }}// Enum <Resource> Mock{{ end }}`,
+		`{{ define "resource_struct.go.tmpl" }}// <{{ .RustResourceName }} Struct> Mock{{ end }}`,
+		`{{ define "relationship.go.tmpl" }}// <{{ .RustResourceName }}Relationships> Mock{{ end }}`,
+		`{{ define "aws_resource_impl.go.tmpl" }}// <impl AwsResource> Mock{{ end }}`,
+		`{{ define "union_enum.go.tmpl" }}// <{{ .RustUnionName }}> Mock{{ end }}`,
 	)
 }
 
 func runSnapshotTest[TestData any](
 	t *testing.T,
-	snapshotFileName string,
 	testData TestData,
-	templateNames ...string,
+	snapshotFileName string,
+	templateName string,
+	templateDir string,
+	funcs template.FuncMap,
+	nestedTemplates ...string,
 ) {
-	if len(templateNames) == 0 {
-		t.Errorf("template name is required")
-	}
-
-	expected, err := loadSnapshot(snapshotFileName)
+	expected, err := LoadSnapshot(snapshotFileName)
 	if err != nil {
 		t.Errorf("cannot load snapshot %s %v", snapshotFileName, err)
 	}
 	expected = strings.TrimSpace(expected)
 
-	actual, err := hydrate(testData, templateNames...)
-	actual = strings.TrimSpace(actual)
+	buffer, err := hydrateTemplate(testData, templateName, templateDir, funcs, nestedTemplates...)
 	if err != nil {
-		t.Errorf("For %s, expected no error but got\n%v", templateNames[0], err)
-	} else if expected != actual {
-		t.Errorf("For %s, expected %s, but got\n%v", templateNames[0], snapshotFileName, actual)
+		t.Errorf("For %s, expected no error but got\n%v", templateName, err)
+	}
+	actual := strings.TrimSpace(buffer.String())
+	if expected != actual {
+		t.Errorf("For %s, expected %s, but got\n%v", templateName, snapshotFileName, actual)
 	}
 }
