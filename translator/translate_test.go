@@ -397,7 +397,7 @@ func TestTranslateAllResources(t *testing.T) {
 				{
 					CfnResourceName:     "AWS::IoT1Click::Placement",
 					RustResourceName:    "AwsIoT1ClickPlacement",
-					GraphQlResourceName: "Aws_IoT1_Click_Placement",
+					GraphQlResourceName: "Aws_IoT1Click_Placement",
 					Properties:          nil,
 					Relationships:       nil,
 				},
@@ -423,7 +423,7 @@ func TestTranslateAllResources(t *testing.T) {
 				{
 					CfnResourceName:     "AWS::IoT1Click::Placement",
 					RustResourceName:    "AwsIoT1ClickPlacement",
-					GraphQlResourceName: "Aws_IoT1_Click_Placement",
+					GraphQlResourceName: "Aws_IoT1Click_Placement",
 					Properties:          nil,
 					Relationships:       nil,
 				},
@@ -432,7 +432,7 @@ func TestTranslateAllResources(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		translated, errors := translateAllResources(mockRelationships, mockCfnSchema, nil, mockTranslateResource)
+		translated, errors := translateAllResources(mockRelationships, mockCfnSchema, tc.filter, mockTranslateResource)
 		if len(errors) > 0 {
 			t.Errorf("Expected no errors but got %v", errors)
 		}

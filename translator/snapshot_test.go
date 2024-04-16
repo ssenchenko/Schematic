@@ -125,7 +125,7 @@ func TestSnapshotRelationship(t *testing.T) {
 		snapshotFileName,
 		templateFileName,
 		TemplateDir,
-		template.FuncMap{"DerefResourceUnion": Deref[ResourceUnion]},
+		nil,
 		`{{ define "union_enum.go.tmpl" }}// <{{ .RustUnionName }}> Mock{{ end }}`,
 	)
 }
@@ -199,7 +199,7 @@ func TestSnapshotAll(t *testing.T) {
 		snapshotFileName,
 		templateFileName,
 		TemplateDir,
-		template.FuncMap{"DerefResourceUnion": Deref[ResourceUnion]},
+		nil,
 		`{{ define "interface_enum.go.tmpl" }}// Enum <Resource> Mock{{ end }}`,
 		`{{ define "resource_struct.go.tmpl" }}// <{{ .RustResourceName }} Struct> Mock{{ end }}`,
 		`{{ define "relationship.go.tmpl" }}// <{{ .RustResourceName }}Relationships> Mock{{ end }}`,

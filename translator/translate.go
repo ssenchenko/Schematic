@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 
 	"github.com/iancoleman/strcase"
 
@@ -125,9 +124,6 @@ func translateAllResources(
 	sort.Slice(resources, func(i, j int) bool { return resources[i] < resources[j] })
 
 	for _, resourceName := range resources {
-		if !isInFilter(resourceName, filter) {
-			continue
-		}
 		res, resErrors := translatorFunc(
 			resourceName, allRelationships, cfnSchemaCombined, filter)
 		if len(resErrors) > 0 {
@@ -238,7 +234,7 @@ func HydrateTemplates(templateData RustModel) (bytes.Buffer, error) {
 		templateData,
 		"all.go.tmpl",
 		filepath.Join("translator", TemplateDir),
-		template.FuncMap{"DerefResourceUnion": Deref[ResourceUnion]},
+		nil,
 		"interface_enum.go.tmpl",
 		"resource_struct.go.tmpl",
 		"relationship.go.tmpl",
