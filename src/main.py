@@ -9,17 +9,6 @@ from translate import translate_gql_common, translate_resource
 
 
 class ResourceFileName:
-    DIR = "out"
-    RUST_DIR = "model"
-    GQL_DIR = "graphql"
-    MAP_DIR = "map"
-    MAP_EXTENSION = "json"
-    RUST_EXTENSION = "rs"
-    GQL_EXTENSION = "gql"
-
-    def __init__(self, file_name: str):
-        self.file_name = file_name
-        self.name_base = file_name.split(".")[0]
 
     @property
     def resource_type_name(self):
